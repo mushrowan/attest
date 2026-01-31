@@ -185,12 +185,10 @@ defmodule NixosTest.Machine do
   end
 
   @impl true
-  def handle_call({:wait_for_open_port, port}, _from, state) do
+  def handle_call({:wait_for_open_port, port}, _from, %{shell: shell} = state) do
     Logger.info("waiting for port #{port} on #{state.name}")
-
-    # TODO: poll until port is open
-
-    {:reply, {:error, :not_implemented}, state}
+    result = poll_port_open(shell, port)
+    {:reply, result, state}
   end
 
   @impl true
@@ -249,6 +247,23 @@ defmodule NixosTest.Machine do
     case Regex.run(~r/ActiveState=(\w+)/, output) do
       [_, state] -> state
       _ -> "unknown"
+    end
+  end
+
+  defp poll_port_open(shell, port, retries \\ 60) do
+    cmd = "nc -z localhost #{port}"
+    {:ok, _output, exit_code} = Shell.execute(shell, cmd)
+
+    case exit_code do
+      0 ->
+        :ok
+
+      _other when retries > 0 ->
+        Process.sleep(1000)
+        poll_port_open(shell, port, retries - 1)
+
+      _other ->
+        raise "port #{port} did not open"
     end
   end
 end
