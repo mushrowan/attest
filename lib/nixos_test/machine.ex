@@ -63,10 +63,36 @@ defmodule NixosTest.Machine do
   end
 
   @doc """
-  Stop the VM.
+  Stop the VM via QMP quit command (legacy, use halt/2 or shutdown/2).
   """
   def stop(machine) do
     GenServer.call(machine, :stop, 30_000)
+  end
+
+  @doc """
+  Gracefully shutdown the VM via guest poweroff command.
+  Waits for the QEMU process to exit.
+  """
+  @spec shutdown(GenServer.server(), timeout()) :: :ok | {:error, term()}
+  def shutdown(machine, timeout \\ 60_000) do
+    GenServer.call(machine, {:shutdown, timeout}, timeout + 5000)
+  end
+
+  @doc """
+  Immediately halt the VM via QMP quit command.
+  Waits for the QEMU process to exit.
+  """
+  @spec halt(GenServer.server(), timeout()) :: :ok | {:error, term()}
+  def halt(machine, timeout \\ 10_000) do
+    GenServer.call(machine, {:halt, timeout}, timeout + 5000)
+  end
+
+  @doc """
+  Wait for the QEMU process to exit.
+  """
+  @spec wait_for_shutdown(GenServer.server(), timeout()) :: :ok | {:error, :timeout}
+  def wait_for_shutdown(machine, timeout \\ 60_000) do
+    GenServer.call(machine, {:wait_for_shutdown, timeout}, timeout + 5000)
   end
 
   @doc """
@@ -205,6 +231,40 @@ defmodule NixosTest.Machine do
   end
 
   @impl true
+  def handle_call({:shutdown, timeout}, _from, %{shell: nil} = state) do
+    Logger.warning("shutdown on #{state.name}: no shell, using halt")
+    do_halt(state, timeout)
+  end
+
+  def handle_call({:shutdown, timeout}, _from, %{shell: shell} = state) do
+    Logger.info("shutting down machine #{state.name}")
+
+    # send poweroff command to guest
+    # the shell may close before we get a response, so we ignore errors
+    case Shell.execute(shell, "poweroff") do
+      {:ok, _, _} -> :ok
+      {:error, :closed} -> :ok
+      {:error, _reason} -> :ok
+    end
+
+    # wait for process to exit
+    result = wait_for_process_exit(state, timeout)
+    new_state = cleanup_connections(state)
+    {:reply, result, new_state}
+  end
+
+  @impl true
+  def handle_call({:halt, timeout}, _from, state) do
+    do_halt(state, timeout)
+  end
+
+  @impl true
+  def handle_call({:wait_for_shutdown, timeout}, _from, state) do
+    result = wait_for_process_exit(state, timeout)
+    {:reply, result, state}
+  end
+
+  @impl true
   def handle_call({:execute, _command}, _from, %{shell: nil} = state) do
     Logger.debug("executing on #{state.name}: not connected")
     raise "cannot execute: machine #{state.name} not connected"
@@ -253,6 +313,15 @@ defmodule NixosTest.Machine do
     {:noreply, state}
   end
 
+  # ignore port messages after cleanup (port may send data after we nil qemu_port)
+  def handle_info({_port, {:data, _data}}, state) do
+    {:noreply, state}
+  end
+
+  def handle_info({_port, {:exit_status, _code}}, state) do
+    {:noreply, state}
+  end
+
   @impl true
   def terminate(reason, state) do
     Logger.info("machine #{state.name} terminating: #{inspect(reason)}")
@@ -293,6 +362,50 @@ defmodule NixosTest.Machine do
     {:ok, shell} = Shell.start_link(socket_path: socket_path)
     :ok = Shell.wait_for_connection(shell)
     %{state | shell: shell, connected: true}
+  end
+
+  defp do_halt(state, timeout) do
+    Logger.info("halting machine #{state.name}")
+
+    # send QMP quit if available
+    if state.qmp do
+      QMP.command(state.qmp, "quit")
+    end
+
+    # wait for process to exit
+    result = wait_for_process_exit(state, timeout)
+    new_state = cleanup_connections(state)
+    {:reply, result, new_state}
+  end
+
+  defp wait_for_process_exit(%{qemu_port: nil}, _timeout) do
+    # no process to wait for
+    :ok
+  end
+
+  defp wait_for_process_exit(%{qemu_port: port}, timeout) do
+    # wait for exit_status message from port
+    receive do
+      {^port, {:exit_status, _code}} ->
+        :ok
+    after
+      timeout ->
+        {:error, :timeout}
+    end
+  end
+
+  defp cleanup_connections(state) do
+    # stop QMP GenServer if running
+    if state.qmp && Process.alive?(state.qmp) do
+      GenServer.stop(state.qmp, :normal)
+    end
+
+    # stop Shell GenServer if running
+    if state.shell && Process.alive?(state.shell) do
+      GenServer.stop(state.shell, :normal)
+    end
+
+    %{state | booted: false, connected: false, qmp: nil, shell: nil, qemu_port: nil}
   end
 
   defp poll_unit_state(shell, unit, retries \\ 60) do

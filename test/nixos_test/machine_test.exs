@@ -454,4 +454,159 @@ defmodule NixosTest.MachineTest do
       File.rm(socket_path)
     end
   end
+
+  describe "wait_for_shutdown/2" do
+    test "returns :ok when process exits" do
+      marker = Path.join(System.tmp_dir!(), "shutdown-marker-#{:rand.uniform(10000)}")
+
+      {:ok, machine} =
+        Machine.start_link(
+          name: "wait-shutdown-test",
+          start_command: "touch #{marker} && sleep 0.2"
+        )
+
+      :ok = Machine.start(machine)
+      Process.sleep(50)
+      assert File.exists?(marker)
+
+      # process will exit after 200ms, wait should succeed
+      assert :ok = Machine.wait_for_shutdown(machine, 5000)
+
+      GenServer.stop(machine)
+      File.rm(marker)
+    end
+
+    test "returns error on timeout" do
+      {:ok, machine} =
+        Machine.start_link(
+          name: "wait-shutdown-timeout-test",
+          start_command: "sleep 10"
+        )
+
+      :ok = Machine.start(machine)
+
+      # very short timeout should fail
+      assert {:error, :timeout} = Machine.wait_for_shutdown(machine, 100)
+
+      GenServer.stop(machine)
+    end
+  end
+
+  describe "halt/2" do
+    test "sends QMP quit and waits for process exit" do
+      socket_path = Path.join(System.tmp_dir!(), "qmp-halt-#{:rand.uniform(10000)}.sock")
+      File.rm(socket_path)
+
+      {:ok, listen} =
+        :gen_tcp.listen(0, [
+          :binary,
+          {:packet, :line},
+          {:active, false},
+          {:ip, {:local, socket_path}}
+        ])
+
+      test_pid = self()
+
+      # mock QMP server
+      spawn(fn ->
+        {:ok, client} = :gen_tcp.accept(listen)
+
+        :ok =
+          :gen_tcp.send(
+            client,
+            ~s({"QMP": {"version": {"qemu": {"major": 8}}, "capabilities": []}}\n)
+          )
+
+        {:ok, _} = :gen_tcp.recv(client, 0, 5000)
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        # receive quit command from halt
+        {:ok, cmd} = :gen_tcp.recv(client, 0, 5000)
+        send(test_pid, {:qmp_command, cmd})
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        # keep alive briefly
+        Process.sleep(100)
+      end)
+
+      # start machine with a short-lived process
+      {:ok, machine} =
+        Machine.start_link(
+          name: "halt-test",
+          start_command: "sleep 0.2",
+          qmp_socket_path: socket_path
+        )
+
+      :ok = Machine.start(machine)
+
+      # call halt - should send quit and wait for process
+      task = Task.async(fn -> Machine.halt(machine, 5000) end)
+
+      # verify quit command was sent
+      assert_receive {:qmp_command, cmd}, 2000
+      assert cmd =~ "quit"
+
+      # halt should complete when process exits
+      assert :ok = Task.await(task, 5000)
+
+      :gen_tcp.close(listen)
+      File.rm(socket_path)
+    end
+  end
+
+  describe "shutdown/2" do
+    test "sends poweroff via shell and waits for exit" do
+      socket_path = Path.join(System.tmp_dir!(), "shell-shutdown-#{:rand.uniform(10000)}.sock")
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      test_pid = self()
+
+      # mock guest that receives poweroff command
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [:binary, {:packet, :line}, {:active, false}])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        # receive poweroff command
+        {:ok, cmd} = :gen_tcp.recv(sock, 0, 5000)
+        send(test_pid, {:shell_command, cmd})
+
+        # send empty response and exit code
+        :ok = :gen_tcp.send(sock, Base.encode64("") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+
+        send(test_pid, :mock_done)
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(
+          name: "shutdown-test",
+          shell: shell,
+          start_command: "sleep 0.3"
+        )
+
+      :ok = Machine.start(machine)
+
+      # shutdown should send poweroff via shell
+      # spawn in task since it will block waiting for process
+      task = Task.async(fn -> Machine.shutdown(machine, 5000) end)
+
+      # verify poweroff was sent
+      assert_receive {:shell_command, cmd}, 2000
+      assert cmd =~ "poweroff"
+
+      assert_receive :mock_done, 1000
+
+      # shutdown should complete when process exits
+      assert :ok = Task.await(task, 5000)
+
+      File.rm(socket_path)
+    end
+  end
 end

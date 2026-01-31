@@ -1,5 +1,5 @@
 # integration test: full VM lifecycle
-# boot -> execute -> wait_for_unit -> stop
+# boot -> execute -> wait_for_unit -> shutdown
 
 Logger.configure(level: :info)
 
@@ -65,19 +65,19 @@ defmodule IntegrationTest do
       :ok = NixosTest.Machine.wait_for_unit(machine, "multi-user.target", 60_000)
       Logger.info("multi-user.target is active")
 
-      # test shutdown via QMP
-      Logger.info("shutting down via QMP...")
-      :ok = NixosTest.Machine.stop(machine)
-      Logger.info("shutdown command sent")
+      # test graceful shutdown (poweroff via shell, wait for exit)
+      Logger.info("graceful shutdown...")
+      :ok = NixosTest.Machine.shutdown(machine, 60_000)
+      Logger.info("VM shutdown complete")
 
       Logger.info("=== ALL TESTS PASSED ===")
       :ok
     rescue
       e ->
         Logger.error("test failed: #{inspect(e)}")
-        # try to stop machine on failure
+        # try to halt machine on failure
         try do
-          NixosTest.Machine.stop(machine)
+          NixosTest.Machine.halt(machine, 10_000)
         rescue
           _ -> :ok
         end

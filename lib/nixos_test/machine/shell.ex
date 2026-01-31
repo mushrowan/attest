@@ -125,18 +125,30 @@ defmodule NixosTest.Machine.Shell do
 
   defp do_execute(socket, command) do
     # send command
-    :ok = :gen_tcp.send(socket, format_command(command))
+    case :gen_tcp.send(socket, format_command(command)) do
+      :ok ->
+        # receive base64 output
+        case :gen_tcp.recv(socket, 0, 900_000) do
+          {:ok, output_line} ->
+            # request exit code
+            :ok = :gen_tcp.send(socket, "echo ${PIPESTATUS[0]}\n")
 
-    # receive base64 output
-    {:ok, output_line} = :gen_tcp.recv(socket, 0, 900_000)
+            # receive exit code
+            case :gen_tcp.recv(socket, 0, 5000) do
+              {:ok, exit_code_line} ->
+                parse_output(String.trim_trailing(output_line), exit_code_line)
 
-    # request exit code
-    :ok = :gen_tcp.send(socket, "echo ${PIPESTATUS[0]}\n")
+              {:error, reason} ->
+                {:error, reason}
+            end
 
-    # receive exit code
-    {:ok, exit_code_line} = :gen_tcp.recv(socket, 0, 5000)
+          {:error, reason} ->
+            {:error, reason}
+        end
 
-    parse_output(String.trim_trailing(output_line), exit_code_line)
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @doc """

@@ -1,27 +1,26 @@
 # progress log
 
-## 2026-01-31: integration tests with real QEMU
+## 2026-01-31: graceful shutdown
 
 ### done
-- `integration-tests/` directory with vm.nix, run-test.exs, default.nix
-- vm.nix: minimal NixOS VM with test-instrumentation (backdoor service)
-- run-test.exs: full lifecycle test (boot -> execute -> wait_for_unit -> stop)
-- CLI: added `eval` and `eval-file` subcommands
-- QMP: skip events when waiting for command responses
-- `nix flake check` passes including integration test (~10s on KVM)
+- `Machine.shutdown/2`: graceful shutdown via guest `poweroff` command, waits for exit
+- `Machine.halt/2`: immediate stop via QMP `quit`, waits for exit
+- `Machine.wait_for_shutdown/2`: wait for QEMU process to exit
+- Shell.execute now returns `{:error, reason}` instead of crashing on socket errors
+- integration test uses graceful shutdown
+- 43 unit tests passing
 
 ### next steps
-1. implement Machine.shutdown gracefully (wait for process exit)
-2. add more integration tests (screenshot, multi-vm)
+1. add more integration tests (screenshot, multi-vm)
+2. consider adding reboot support
 
 ---
 
 ## 2026-01-31: earlier (condensed)
 
-- QMP retry logic: `connect_qmp/3` retries 10x with 100ms delay
-- Machine.start/1 waits for shell connection, handles spawn/QMP/shell combos
+- integration tests with real QEMU VM (boot -> execute -> wait_for_unit -> shutdown)
+- CLI: `eval` and `eval-file` subcommands
+- QMP: skip async events, retry connection 10x
+- Machine.start/1 handles spawn/QMP/shell combinations
 - Machine delegates to QMP/Shell for execute, screenshot, stop, wait_for_unit
-- Machine.QMP: parse/encode messages, connect + negotiate, command/3
-- Machine.Shell: format/parse commands, listen socket, execute/2
 - Driver: start_all/1, get_machine/2, manages MachineSupervisor
-- 39 unit tests passing
