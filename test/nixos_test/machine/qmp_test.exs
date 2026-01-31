@@ -34,4 +34,24 @@ defmodule NixosTest.Machine.QMPTest do
       assert {:event, "STOP", _timestamp} = QMP.parse_message(event)
     end
   end
+
+  describe "encode_command/2" do
+    test "encodes simple command" do
+      assert QMP.encode_command("qmp_capabilities") == ~s({"execute":"qmp_capabilities"}\n)
+    end
+
+    test "encodes command with arguments" do
+      json = QMP.encode_command("screendump", %{"filename" => "/tmp/shot.ppm"})
+      decoded = Jason.decode!(json)
+      assert decoded["execute"] == "screendump"
+      assert decoded["arguments"]["filename"] == "/tmp/shot.ppm"
+    end
+
+    test "encodes command with empty arguments" do
+      json = QMP.encode_command("query-status", %{})
+      decoded = Jason.decode!(json)
+      assert decoded["execute"] == "query-status"
+      refute Map.has_key?(decoded, "arguments")
+    end
+  end
 end

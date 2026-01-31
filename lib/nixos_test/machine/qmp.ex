@@ -59,4 +59,18 @@ defmodule NixosTest.Machine.QMP do
   defp parse_decoded(%{"event" => name, "timestamp" => timestamp}) do
     {:event, name, timestamp}
   end
+
+  @doc """
+  Encode a QMP command to JSON string (with trailing newline).
+  """
+  @spec encode_command(String.t(), map()) :: String.t()
+  def encode_command(cmd, args \\ %{})
+
+  def encode_command(cmd, args) when args == %{} do
+    Jason.encode!(%{"execute" => cmd}) <> "\n"
+  end
+
+  def encode_command(cmd, args) do
+    Jason.encode!(%{"execute" => cmd, "arguments" => args}) <> "\n"
+  end
 end
