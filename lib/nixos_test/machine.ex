@@ -182,22 +182,34 @@ defmodule NixosTest.Machine do
   def handle_call(:start, _from, state) do
     Logger.info("starting machine #{state.name}")
 
+    # create shell listener FIRST (before QEMU starts, so it can connect)
+    {shell_pid, state} =
+      if state.shell_socket_path do
+        {:ok, shell} = Shell.start_link(socket_path: state.shell_socket_path)
+        {shell, %{state | shell: shell}}
+      else
+        {nil, state}
+      end
+
     # spawn QEMU process if start_command provided
     state =
       if state.start_command do
+        Logger.info("spawning QEMU for #{state.name}")
+
         port =
           Port.open({:spawn, state.start_command}, [:binary, :exit_status, :stderr_to_stdout])
 
-        Logger.debug("spawned process for #{state.name}")
         %{state | qemu_port: port}
       else
         state
       end
 
-    # create shell listener and wait for connection if path provided
+    # wait for shell connection if we created a listener
     state =
-      if state.shell_socket_path do
-        connect_shell(state, state.shell_socket_path)
+      if shell_pid do
+        Logger.info("waiting for shell connection on #{state.name}")
+        :ok = Shell.wait_for_connection(shell_pid, 120_000)
+        %{state | connected: true}
       else
         state
       end
@@ -211,11 +223,6 @@ defmodule NixosTest.Machine do
       end
 
     {:reply, :ok, %{state | booted: true}}
-  end
-
-  @impl true
-  def handle_call(:booted?, _from, state) do
-    {:reply, state.booted, state}
   end
 
   @impl true
@@ -309,7 +316,9 @@ defmodule NixosTest.Machine do
   end
 
   def handle_info({port, {:data, data}}, %{qemu_port: port} = state) do
-    Logger.debug("QEMU output: #{inspect(data)}")
+    # log first 200 chars of QEMU output at info level for debugging
+    truncated = String.slice(to_string(data), 0, 200)
+    Logger.info("QEMU[#{state.name}]: #{truncated}")
     {:noreply, state}
   end
 
@@ -357,10 +366,10 @@ defmodule NixosTest.Machine do
     end
   end
 
-  defp connect_shell(state, socket_path) do
+  defp connect_shell(state, socket_path, timeout \\ 120_000) do
     Logger.debug("waiting for shell connection at #{socket_path}")
     {:ok, shell} = Shell.start_link(socket_path: socket_path)
-    :ok = Shell.wait_for_connection(shell)
+    :ok = Shell.wait_for_connection(shell, timeout)
     %{state | shell: shell, connected: true}
   end
 
@@ -391,6 +400,23 @@ defmodule NixosTest.Machine do
     after
       timeout ->
         {:error, :timeout}
+    end
+  end
+
+  defp flush_port_messages(state) do
+    port = state.qemu_port
+
+    receive do
+      {^port, {:data, data}} ->
+        truncated = String.slice(to_string(data), 0, 500)
+        Logger.info("QEMU[#{state.name}] early: #{truncated}")
+        flush_port_messages(state)
+
+      {^port, {:exit_status, code}} ->
+        Logger.error("QEMU[#{state.name}] exited early with code: #{code}")
+        %{state | qemu_port: nil}
+    after
+      0 -> state
     end
   end
 

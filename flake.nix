@@ -90,13 +90,20 @@
               '';
             };
           }
-          // lib.optionalAttrs pkgs.stdenv.isLinux {
-            # integration test with real QEMU VM (requires KVM)
-            integration = import ./integration-tests {
-              inherit pkgs;
-              nixos-test-ng = nixos-test;
-            };
-          };
+          // lib.optionalAttrs pkgs.stdenv.isLinux (
+            let
+              integrationTests = import ./integration-tests {
+                inherit pkgs;
+                nixos-test-ng = nixos-test;
+              };
+            in
+            {
+              # single-vm integration test (boot, execute, screenshot, shutdown)
+              integration = integrationTests.basic;
+              # multi-vm integration test (two VMs via Driver)
+              integration-multi-vm = integrationTests.multi-vm;
+            }
+          );
 
           packages = {
             default = nixos-test;

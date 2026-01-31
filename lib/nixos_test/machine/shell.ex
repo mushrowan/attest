@@ -36,7 +36,7 @@ defmodule NixosTest.Machine.Shell do
   """
   @spec wait_for_connection(GenServer.server(), timeout()) :: :ok | {:error, term()}
   def wait_for_connection(server, timeout \\ 30_000) do
-    GenServer.call(server, :wait_for_connection, timeout)
+    GenServer.call(server, {:wait_for_connection, timeout}, timeout + 5000)
   end
 
   @doc """
@@ -71,10 +71,14 @@ defmodule NixosTest.Machine.Shell do
   end
 
   @impl true
-  def handle_call(:wait_for_connection, _from, %{listen_socket: listen, connected: false} = state) do
-    case :gen_tcp.accept(listen, 30_000) do
+  def handle_call(
+        {:wait_for_connection, timeout},
+        _from,
+        %{listen_socket: listen, connected: false} = state
+      ) do
+    case :gen_tcp.accept(listen, timeout) do
       {:ok, socket} ->
-        case wait_for_backdoor_ready(socket) do
+        case wait_for_backdoor_ready(socket, timeout) do
           :ok ->
             Logger.info("shell backdoor connected")
             {:reply, :ok, %{state | socket: socket, connected: true}}
@@ -89,7 +93,7 @@ defmodule NixosTest.Machine.Shell do
     end
   end
 
-  def handle_call(:wait_for_connection, _from, %{connected: true} = state) do
+  def handle_call({:wait_for_connection, _timeout}, _from, %{connected: true} = state) do
     {:reply, :ok, state}
   end
 
@@ -108,14 +112,14 @@ defmodule NixosTest.Machine.Shell do
 
   # Private helpers
 
-  defp wait_for_backdoor_ready(socket) do
-    case :gen_tcp.recv(socket, 0, 30_000) do
+  defp wait_for_backdoor_ready(socket, timeout) do
+    case :gen_tcp.recv(socket, 0, timeout) do
       {:ok, line} ->
         if String.contains?(line, @backdoor_ready) do
           :ok
         else
           # keep reading until we see the ready message
-          wait_for_backdoor_ready(socket)
+          wait_for_backdoor_ready(socket, timeout)
         end
 
       {:error, reason} ->

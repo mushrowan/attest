@@ -88,9 +88,12 @@ defmodule NixosTest.Driver do
   def handle_call(:start_all, _from, state) do
     Logger.info("starting all machines")
 
-    # start all machines in parallel
+    # start all machines in parallel (5 min timeout for VM boot)
     state.machines
-    |> Task.async_stream(fn {_name, pid} -> NixosTest.Machine.start(pid) end)
+    |> Task.async_stream(
+      fn {_name, pid} -> NixosTest.Machine.start(pid) end,
+      timeout: 300_000
+    )
     |> Enum.each(fn {:ok, :ok} -> :ok end)
 
     {:reply, :ok, state}

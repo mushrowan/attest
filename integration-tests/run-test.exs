@@ -65,6 +65,23 @@ defmodule IntegrationTest do
       :ok = NixosTest.Machine.wait_for_unit(machine, "multi-user.target", 60_000)
       Logger.info("multi-user.target is active")
 
+      # test screenshot
+      Logger.info("testing screenshot...")
+      screenshot_path = Path.join(state_dir, "screenshot.ppm")
+      :ok = NixosTest.Machine.screenshot(machine, screenshot_path)
+
+      if not File.exists?(screenshot_path) do
+        raise "screenshot file not created: #{screenshot_path}"
+      end
+
+      {:ok, stat} = File.stat(screenshot_path)
+
+      if stat.size < 1000 do
+        raise "screenshot file too small: #{stat.size} bytes"
+      end
+
+      Logger.info("screenshot saved: #{screenshot_path} (#{stat.size} bytes)")
+
       # test graceful shutdown (poweroff via shell, wait for exit)
       Logger.info("graceful shutdown...")
       :ok = NixosTest.Machine.shutdown(machine, 60_000)
