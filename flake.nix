@@ -89,6 +89,13 @@
                 touch $out
               '';
             };
+          }
+          // lib.optionalAttrs pkgs.stdenv.isLinux {
+            # integration test with real QEMU VM (requires KVM)
+            integration = import ./integration-tests {
+              inherit pkgs;
+              nixos-test-ng = nixos-test;
+            };
           };
 
           packages = {

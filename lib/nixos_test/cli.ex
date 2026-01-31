@@ -29,19 +29,30 @@ defmodule NixosTest.CLI do
     {opts, rest}
   end
 
-  defp run({opts, _rest}) do
-    if opts[:help] do
-      print_help()
-    else
-      IO.puts("nixos-test-ng v#{Application.spec(:nixos_test, :vsn)}")
-      IO.puts("")
-      IO.puts("not yet implemented - see ARCHITECTURE.md for design")
+  defp run({opts, rest}) do
+    cond do
+      opts[:help] ->
+        print_help()
 
-      if opts[:interactive] do
+      match?(["eval" | _], rest) ->
+        ["eval" | code_args] = rest
+        code = Enum.join(code_args, " ")
+        Code.eval_string(code)
+
+      match?(["eval-file" | _], rest) ->
+        ["eval-file", file | _] = rest
+        Code.eval_file(file)
+
+      true ->
+        IO.puts("nixos-test-ng v#{Application.spec(:nixos_test, :vsn)}")
         IO.puts("")
-        IO.puts("starting interactive shell...")
-        IEx.start()
-      end
+        IO.puts("not yet implemented - see ARCHITECTURE.md for design")
+
+        if opts[:interactive] do
+          IO.puts("")
+          IO.puts("starting interactive shell...")
+          IEx.start()
+        end
     end
   end
 

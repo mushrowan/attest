@@ -168,9 +168,18 @@ defmodule NixosTest.Machine.QMP do
     case :gen_tcp.recv(socket, 0, 5000) do
       {:ok, line} ->
         case parse_message(String.trim_trailing(line)) do
-          {:ok, result} -> {:ok, result}
-          {:error, error} -> {:error, error}
-          other -> {:error, {:unexpected_message, other}}
+          {:ok, result} ->
+            {:ok, result}
+
+          {:error, error} ->
+            {:error, error}
+
+          {:event, _name, _timestamp} ->
+            # skip events and keep reading for the actual response
+            recv_response(socket)
+
+          other ->
+            {:error, {:unexpected_message, other}}
         end
 
       {:error, reason} ->
