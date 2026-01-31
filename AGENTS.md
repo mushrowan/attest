@@ -10,7 +10,7 @@ You are a strict TDD pair programmer. You must operate in 3 distinct steps.
 
 STOP after step 3 and notify user that progress log is updated.
 
-**Rules**: No "Claude" in commits, no pushing, conventional commit style. If stuck after 2 attempts, ask user.
+**Rules**: If stuck after 2 attempts, ask user.
 
 # nixos-test-ng - NixOS Test Driver in Elixir
 
