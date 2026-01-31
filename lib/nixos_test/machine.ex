@@ -20,15 +20,16 @@ defmodule NixosTest.Machine do
 
   require Logger
 
+  alias NixosTest.Machine.{QMP, Shell}
+
   defstruct [
     :name,
     :start_command,
     :state_dir,
     :shared_dir,
     :qemu_port,
-    :qmp_socket,
-    :shell_socket,
-    :monitor_socket,
+    :qmp,
+    :shell,
     :booted,
     :connected,
     :callbacks
@@ -118,13 +119,20 @@ defmodule NixosTest.Machine do
 
   @impl true
   def init(opts) do
+    # allow injecting QMP/Shell for testing
+    qmp = Keyword.get(opts, :qmp)
+    shell = Keyword.get(opts, :shell)
+    connected = qmp != nil or shell != nil
+
     state = %__MODULE__{
       name: Keyword.fetch!(opts, :name),
       start_command: Keyword.get(opts, :start_command),
       state_dir: Keyword.get(opts, :state_dir),
       shared_dir: Keyword.get(opts, :shared_dir),
-      booted: false,
-      connected: false,
+      qmp: qmp,
+      shell: shell,
+      booted: connected,
+      connected: connected,
       callbacks: Keyword.get(opts, :callbacks, [])
     }
 
@@ -155,14 +163,15 @@ defmodule NixosTest.Machine do
   end
 
   @impl true
-  def handle_call({:execute, command}, _from, state) do
+  def handle_call({:execute, _command}, _from, %{shell: nil} = state) do
+    Logger.debug("executing on #{state.name}: not connected")
+    raise "cannot execute: machine #{state.name} not connected"
+  end
+
+  def handle_call({:execute, command}, _from, %{shell: shell} = state) do
     Logger.debug("executing on #{state.name}: #{command}")
-
-    # TODO: send command via shell socket
-    # protocol: send "( <command> ); echo '|!=EOF' $?\n"
-    # receive output until "|!=EOF <exit_code>\n"
-
-    {:reply, {:error, :not_implemented}, state}
+    {:ok, output, exit_code} = Shell.execute(shell, command)
+    {:reply, {exit_code, output}, state}
   end
 
   @impl true
