@@ -1,14 +1,18 @@
 # progress log
 
-## 2026-01-31: Driver cleanup test
+## 2026-01-31: Machine.start executes start_command
 
 ### done
-- added test verifying machines are stopped when Driver terminates
-- 35 tests total, all passing
+- **Machine.start/1** now executes `start_command` via `Port.open`
+- handles port exit status and output messages
+- robust terminate (handles already-closed ports)
+- Driver.terminate checks Process.alive? before stopping machines
+- 36 tests total, all passing
 
 ### next steps
-1. implement actual VM lifecycle (start QEMU process)
-2. add integration tests with real QEMU
+1. Machine.start connects to QMP socket after spawning
+2. Machine.start waits for shell connection
+3. add integration tests with real QEMU
 
 ---
 
