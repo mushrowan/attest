@@ -1,22 +1,26 @@
 # progress log
 
-## 2026-01-31: integrate QMP + Shell into Machine
+## 2026-01-31: Driver creates machines from config
 
 ### done
-- **Machine GenServer** now delegates to QMP/Shell:
-  - execute/2 → Shell.execute (returns `{exit_code, output}`)
-  - screenshot/2 → QMP.command("screendump", ...)
-  - stop/1 → QMP.command("quit")
-  - wait_for_unit/3 → polls systemctl until active/failed
-  - wait_for_open_port/3 → polls nc -z until port open
-- accepts injected QMP/Shell pids for testing
-- crashes with descriptive errors when not connected
-- 32 tests total, all passing
+- **Driver.init** now accepts `machines: [%{name: "client", ...}]` option
+- creates Machine GenServers under MachineSupervisor (not linked to Driver)
+- `get_machine/2` returns `{:ok, pid}` for machines created from config
+- 33 tests total, all passing
 
 ### next steps
 1. implement actual VM lifecycle (start QEMU process)
-2. implement Driver test coordination
+2. make `start_all/1` call Machine.start on each machine
 3. add integration tests with real QEMU
+
+---
+
+## 2026-01-31: earlier (condensed)
+
+- Machine GenServer delegates to QMP/Shell for execute, screenshot, stop, wait_for_unit, wait_for_open_port
+- Machine.QMP: parse/encode messages, connect + negotiate, command/3
+- Machine.Shell: format/parse commands, listen socket, execute/2
+- project setup: flake-parts, elixir 1.17, treefmt
 
 ---
 
