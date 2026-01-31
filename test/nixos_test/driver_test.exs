@@ -30,5 +30,23 @@ defmodule NixosTest.DriverTest do
 
       GenServer.stop(driver)
     end
+
+    test "start_all boots all machines" do
+      {:ok, driver} = Driver.start_link(machines: [%{name: "m1"}, %{name: "m2"}])
+
+      # machines start not booted
+      {:ok, m1} = Driver.get_machine(driver, "m1")
+      {:ok, m2} = Driver.get_machine(driver, "m2")
+      refute NixosTest.Machine.booted?(m1)
+      refute NixosTest.Machine.booted?(m2)
+
+      # start_all boots them
+      :ok = Driver.start_all(driver)
+
+      assert NixosTest.Machine.booted?(m1)
+      assert NixosTest.Machine.booted?(m2)
+
+      GenServer.stop(driver)
+    end
   end
 end

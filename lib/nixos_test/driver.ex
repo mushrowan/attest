@@ -88,8 +88,10 @@ defmodule NixosTest.Driver do
   def handle_call(:start_all, _from, state) do
     Logger.info("starting all machines")
 
-    # TODO: start machines in parallel using Task.async_stream
-    # for now just return ok
+    # start all machines in parallel
+    state.machines
+    |> Task.async_stream(fn {_name, pid} -> NixosTest.Machine.start(pid) end)
+    |> Enum.each(fn {:ok, :ok} -> :ok end)
 
     {:reply, :ok, state}
   end

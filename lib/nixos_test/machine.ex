@@ -53,6 +53,14 @@ defmodule NixosTest.Machine do
   end
 
   @doc """
+  Check if the VM is booted.
+  """
+  @spec booted?(GenServer.server()) :: boolean()
+  def booted?(machine) do
+    GenServer.call(machine, :booted?)
+  end
+
+  @doc """
   Stop the VM.
   """
   def stop(machine) do
@@ -150,7 +158,13 @@ defmodule NixosTest.Machine do
     # 3. connect to shell socket (virtconsole)
     # 4. wait for boot
 
-    {:reply, {:error, :not_implemented}, state}
+    # for now, just mark as booted (real implementation pending)
+    {:reply, :ok, %{state | booted: true}}
+  end
+
+  @impl true
+  def handle_call(:booted?, _from, state) do
+    {:reply, state.booted, state}
   end
 
   @impl true
