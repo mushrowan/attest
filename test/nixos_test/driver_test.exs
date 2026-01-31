@@ -48,5 +48,22 @@ defmodule NixosTest.DriverTest do
 
       GenServer.stop(driver)
     end
+
+    test "machines are stopped when driver terminates" do
+      {:ok, driver} = Driver.start_link(machines: [%{name: "cleanup1"}, %{name: "cleanup2"}])
+
+      {:ok, m1} = Driver.get_machine(driver, "cleanup1")
+      {:ok, m2} = Driver.get_machine(driver, "cleanup2")
+
+      assert Process.alive?(m1)
+      assert Process.alive?(m2)
+
+      # stop driver
+      GenServer.stop(driver)
+
+      # machines should be stopped
+      refute Process.alive?(m1)
+      refute Process.alive?(m2)
+    end
   end
 end
