@@ -10,6 +10,27 @@ defmodule NixosTest.MachineTest do
       assert Process.alive?(pid)
       GenServer.stop(pid)
     end
+
+    test "start/1 executes start_command" do
+      marker = Path.join(System.tmp_dir!(), "machine-start-#{:rand.uniform(100_000)}")
+      File.rm(marker)
+      refute File.exists?(marker)
+
+      {:ok, machine} =
+        Machine.start_link(
+          name: "start-cmd-test",
+          start_command: "touch #{marker}"
+        )
+
+      :ok = Machine.start(machine)
+
+      # give the command time to execute
+      Process.sleep(100)
+      assert File.exists?(marker)
+
+      GenServer.stop(machine)
+      File.rm(marker)
+    end
   end
 
   describe "execute/2" do

@@ -149,17 +149,22 @@ defmodule NixosTest.Machine do
   end
 
   @impl true
-  def handle_call(:start, _from, state) do
+  def handle_call(:start, _from, %{start_command: nil} = state) do
+    Logger.info("starting machine #{state.name} (no start_command)")
+    {:reply, :ok, %{state | booted: true}}
+  end
+
+  def handle_call(:start, _from, %{start_command: cmd} = state) do
     Logger.info("starting machine #{state.name}")
 
-    # TODO: actually start QEMU
-    # 1. spawn QEMU process with appropriate args
-    # 2. connect to QMP socket
-    # 3. connect to shell socket (virtconsole)
-    # 4. wait for boot
+    # spawn QEMU process
+    port = Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout])
+    Logger.debug("spawned process for #{state.name}")
 
-    # for now, just mark as booted (real implementation pending)
-    {:reply, :ok, %{state | booted: true}}
+    # TODO: connect to QMP socket
+    # TODO: wait for shell connection
+
+    {:reply, :ok, %{state | qemu_port: port, booted: true}}
   end
 
   @impl true
@@ -218,9 +223,14 @@ defmodule NixosTest.Machine do
   end
 
   @impl true
-  def handle_info({:EXIT, port, reason}, %{qemu_port: port} = state) do
-    Logger.warning("QEMU process exited: #{inspect(reason)}")
+  def handle_info({port, {:exit_status, code}}, %{qemu_port: port} = state) do
+    Logger.warning("QEMU process exited with code #{code}")
     {:noreply, %{state | booted: false, connected: false, qemu_port: nil}}
+  end
+
+  def handle_info({port, {:data, data}}, %{qemu_port: port} = state) do
+    Logger.debug("QEMU output: #{inspect(data)}")
+    {:noreply, state}
   end
 
   @impl true
@@ -229,7 +239,11 @@ defmodule NixosTest.Machine do
 
     # cleanup QEMU process if running
     if state.qemu_port do
-      Port.close(state.qemu_port)
+      try do
+        Port.close(state.qemu_port)
+      rescue
+        ArgumentError -> :ok
+      end
     end
 
     :ok

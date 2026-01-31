@@ -132,9 +132,11 @@ defmodule NixosTest.Driver do
       Process.cancel_timer(state.timeout_ref)
     end
 
-    # cleanup machines
+    # cleanup machines (some may already be stopped)
     for {_name, pid} <- state.machines do
-      GenServer.stop(pid, :shutdown)
+      if Process.alive?(pid) do
+        GenServer.stop(pid, :shutdown)
+      end
     end
 
     :ok
