@@ -61,4 +61,59 @@ defmodule NixosTest.MachineTest do
       assert msg =~ "not connected"
     end
   end
+
+  describe "screenshot/2" do
+    test "delegates to QMP screendump command" do
+      # set up mock QMP server
+      socket_path = Path.join(System.tmp_dir!(), "qmp-test-#{:rand.uniform(10000)}.sock")
+      File.rm(socket_path)
+
+      {:ok, listen} =
+        :gen_tcp.listen(0, [
+          :binary,
+          {:packet, :line},
+          {:active, false},
+          {:ip, {:local, socket_path}}
+        ])
+
+      test_pid = self()
+
+      spawn(fn ->
+        {:ok, client} = :gen_tcp.accept(listen)
+        # send greeting
+        :ok =
+          :gen_tcp.send(
+            client,
+            ~s({"QMP": {"version": {"qemu": {"major": 8}}, "capabilities": []}}\n)
+          )
+
+        # receive qmp_capabilities, send ok
+        {:ok, _} = :gen_tcp.recv(client, 0, 5000)
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+        # receive screendump command
+        {:ok, cmd} = :gen_tcp.recv(client, 0, 5000)
+        send(test_pid, {:qmp_command, cmd})
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        receive do
+          :stop -> :ok
+        end
+      end)
+
+      {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+      {:ok, machine} = Machine.start_link(name: "screenshot-test", qmp: qmp)
+
+      assert :ok = Machine.screenshot(machine, "/tmp/test.ppm")
+
+      # verify the command sent
+      assert_receive {:qmp_command, cmd}, 1000
+      assert cmd =~ "screendump"
+      assert cmd =~ "/tmp/test.ppm"
+
+      GenServer.stop(machine)
+      GenServer.stop(qmp)
+      :gen_tcp.close(listen)
+      File.rm(socket_path)
+    end
+  end
 end

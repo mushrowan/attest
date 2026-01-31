@@ -194,12 +194,15 @@ defmodule NixosTest.Machine do
   end
 
   @impl true
-  def handle_call({:screenshot, filename}, _from, state) do
+  def handle_call({:screenshot, _filename}, _from, %{qmp: nil} = state) do
+    Logger.debug("screenshot on #{state.name}: not connected")
+    raise "cannot take screenshot: machine #{state.name} not connected"
+  end
+
+  def handle_call({:screenshot, filename}, _from, %{qmp: qmp} = state) do
     Logger.info("taking screenshot: #{filename}")
-
-    # TODO: use QMP screendump command
-
-    {:reply, {:error, :not_implemented}, state}
+    {:ok, _} = QMP.command(qmp, "screendump", %{"filename" => filename})
+    {:reply, :ok, state}
   end
 
   @impl true
