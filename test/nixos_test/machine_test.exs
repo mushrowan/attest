@@ -86,6 +86,103 @@ defmodule NixosTest.MachineTest do
       :gen_tcp.close(listen)
       File.rm(socket_path)
     end
+
+    test "start/1 retries QMP connection when socket not immediately available" do
+      socket_path = Path.join(System.tmp_dir!(), "qmp-retry-#{:rand.uniform(10000)}.sock")
+      File.rm(socket_path)
+
+      test_pid = self()
+
+      # delay socket creation by 200ms (simulating QEMU startup)
+      spawn(fn ->
+        Process.sleep(200)
+
+        {:ok, listen} =
+          :gen_tcp.listen(0, [
+            :binary,
+            {:packet, :line},
+            {:active, false},
+            {:ip, {:local, socket_path}}
+          ])
+
+        {:ok, client} = :gen_tcp.accept(listen, 5000)
+
+        :ok =
+          :gen_tcp.send(
+            client,
+            ~s({"QMP": {"version": {"qemu": {"major": 8}}, "capabilities": []}}\n)
+          )
+
+        {:ok, cmd} = :gen_tcp.recv(client, 0, 5000)
+        send(test_pid, {:qmp_received, cmd})
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        receive do
+          :stop -> :ok
+        after
+          10_000 -> :ok
+        end
+
+        :gen_tcp.close(listen)
+      end)
+
+      {:ok, machine} =
+        Machine.start_link(
+          name: "qmp-retry-test",
+          qmp_socket_path: socket_path
+        )
+
+      # should succeed despite socket not existing initially
+      :ok = Machine.start(machine)
+
+      assert_receive {:qmp_received, cmd}, 3000
+      assert cmd =~ "qmp_capabilities"
+      assert Machine.booted?(machine)
+
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+
+    test "start/1 waits for shell connection" do
+      socket_path = Path.join(System.tmp_dir!(), "shell-start-#{:rand.uniform(10000)}.sock")
+      File.rm(socket_path)
+
+      {:ok, machine} =
+        Machine.start_link(
+          name: "shell-connect-test",
+          shell_socket_path: socket_path
+        )
+
+      test_pid = self()
+
+      # start Machine.start in a task (it will block waiting for connection)
+      task =
+        Task.async(fn ->
+          result = Machine.start(machine)
+          send(test_pid, :start_completed)
+          result
+        end)
+
+      # give shell time to start listening
+      Process.sleep(50)
+
+      # simulate guest connecting
+      {:ok, sock} =
+        :gen_tcp.connect({:local, socket_path}, 0, [:binary, {:packet, :line}, {:active, false}])
+
+      :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+      # start should complete now
+      assert_receive :start_completed, 2000
+      assert :ok = Task.await(task)
+
+      # machine should be connected
+      assert Machine.booted?(machine)
+
+      :gen_tcp.close(sock)
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
   end
 
   describe "execute/2" do

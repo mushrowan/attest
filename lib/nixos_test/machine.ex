@@ -26,6 +26,7 @@ defmodule NixosTest.Machine do
     :name,
     :start_command,
     :qmp_socket_path,
+    :shell_socket_path,
     :state_dir,
     :shared_dir,
     :qemu_port,
@@ -137,6 +138,7 @@ defmodule NixosTest.Machine do
       name: Keyword.fetch!(opts, :name),
       start_command: Keyword.get(opts, :start_command),
       qmp_socket_path: Keyword.get(opts, :qmp_socket_path),
+      shell_socket_path: Keyword.get(opts, :shell_socket_path),
       state_dir: Keyword.get(opts, :state_dir),
       shared_dir: Keyword.get(opts, :shared_dir),
       qmp: qmp,
@@ -151,24 +153,28 @@ defmodule NixosTest.Machine do
   end
 
   @impl true
-  def handle_call(:start, _from, %{start_command: nil, qmp_socket_path: nil} = state) do
-    Logger.info("starting machine #{state.name} (no start_command)")
-    {:reply, :ok, %{state | booted: true}}
-  end
-
-  def handle_call(:start, _from, %{start_command: nil, qmp_socket_path: qmp_path} = state)
-      when qmp_path != nil do
-    Logger.info("starting machine #{state.name} (connecting to existing QMP)")
-    state = connect_qmp(state, qmp_path)
-    {:reply, :ok, %{state | booted: true}}
-  end
-
-  def handle_call(:start, _from, %{start_command: cmd} = state) do
+  def handle_call(:start, _from, state) do
     Logger.info("starting machine #{state.name}")
 
-    # spawn QEMU process
-    port = Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout])
-    Logger.debug("spawned process for #{state.name}")
+    # spawn QEMU process if start_command provided
+    state =
+      if state.start_command do
+        port =
+          Port.open({:spawn, state.start_command}, [:binary, :exit_status, :stderr_to_stdout])
+
+        Logger.debug("spawned process for #{state.name}")
+        %{state | qemu_port: port}
+      else
+        state
+      end
+
+    # create shell listener and wait for connection if path provided
+    state =
+      if state.shell_socket_path do
+        connect_shell(state, state.shell_socket_path)
+      else
+        state
+      end
 
     # connect to QMP socket if path provided
     state =
@@ -178,9 +184,7 @@ defmodule NixosTest.Machine do
         state
       end
 
-    # TODO: wait for shell connection
-
-    {:reply, :ok, %{state | qemu_port: port, booted: true}}
+    {:reply, :ok, %{state | booted: true}}
   end
 
   @impl true
@@ -267,10 +271,28 @@ defmodule NixosTest.Machine do
 
   # Private helpers
 
-  defp connect_qmp(state, socket_path) do
+  defp connect_qmp(state, socket_path, retries \\ 10) do
     Logger.debug("connecting to QMP at #{socket_path}")
-    {:ok, qmp} = QMP.start_link(socket_path: socket_path)
-    %{state | qmp: qmp, connected: true}
+
+    if File.exists?(socket_path) do
+      {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+      %{state | qmp: qmp, connected: true}
+    else
+      if retries > 0 do
+        Logger.debug("QMP socket not ready, retrying in 100ms (#{retries} left)")
+        Process.sleep(100)
+        connect_qmp(state, socket_path, retries - 1)
+      else
+        raise "QMP socket #{socket_path} not found after retries"
+      end
+    end
+  end
+
+  defp connect_shell(state, socket_path) do
+    Logger.debug("waiting for shell connection at #{socket_path}")
+    {:ok, shell} = Shell.start_link(socket_path: socket_path)
+    :ok = Shell.wait_for_connection(shell)
+    %{state | shell: shell, connected: true}
   end
 
   defp poll_unit_state(shell, unit, retries \\ 60) do
