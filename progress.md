@@ -1,37 +1,25 @@
 # progress log
 
-## 2026-01-31: project setup
+## 2026-01-31: fix flake test check
 
 ### done
-- created project structure with flake-parts + treefmt
-- mix.exs with elixir 1.17, jason dep, credo/dialyxir/excoveralls for dev
-- nix/package.nix with mixRelease + escript wrapper
-- nix/devshell.nix with elixir toolchain
-- lib/ modules: NixosTest, Application, CLI, Driver, Machine (stubs)
-- test/ with basic unit tests
-- AGENTS.md with TDD protocol
-- ARCHITECTURE.md with full design doc
-
-### working
-- `nix build` produces working escript
-- `nix develop` gives dev shell with elixir 1.17 + erlang 27
-- `mix test` passes (6 tests)
-- `nix fmt` formats nix + elixir files
-
-### issues encountered
-- nixpkgs hex 2.3.1 incompatible with elixir 1.17 (Protocol.__concat__ undefined)
-  - workaround: install hex locally via `mix local.hex --force`
-- mixRelease postFixup corrupts escripts in bin/
-  - fix: put escript in libexec/, create wrapper script
+- fixed `nix flake check` to include test deps (credo, dialyxir, excoveralls)
+- added `mixFodDepsAll` with correct hash in package.nix
+- test check now uses `beamPackages.mixRelease` with all deps
+- removed doctest that fails in nix builds (no compile-time source info)
 
 ### next steps
-1. fix test check in flake (needs all deps including test deps)
-2. commit initial project
-3. implement Machine.QMP (QEMU Machine Protocol client)
-4. implement Machine.Shell (virtconsole backdoor)
-5. implement actual VM lifecycle in Machine
-6. implement Driver test coordination
-7. add integration tests with real QEMU
+1. implement Machine.QMP (QEMU Machine Protocol client)
+2. implement Machine.Shell (virtconsole backdoor)
+3. implement actual VM lifecycle in Machine
+4. implement Driver test coordination
+5. add integration tests with real QEMU
+
+---
+
+## 2026-01-31: project setup (condensed)
+
+initial project with flake-parts + treefmt, mix.exs with elixir 1.17, module stubs (NixosTest, Application, CLI, Driver, Machine), 6 passing tests. workarounds: local hex install (nixpkgs hex incompatible), escript in libexec/ with wrapper (postFixup corrupts escripts)
 
 ## architecture
 
