@@ -25,6 +25,7 @@ defmodule NixosTest.Machine do
   defstruct [
     :name,
     :start_command,
+    :qmp_socket_path,
     :state_dir,
     :shared_dir,
     :qemu_port,
@@ -135,6 +136,7 @@ defmodule NixosTest.Machine do
     state = %__MODULE__{
       name: Keyword.fetch!(opts, :name),
       start_command: Keyword.get(opts, :start_command),
+      qmp_socket_path: Keyword.get(opts, :qmp_socket_path),
       state_dir: Keyword.get(opts, :state_dir),
       shared_dir: Keyword.get(opts, :shared_dir),
       qmp: qmp,
@@ -149,8 +151,15 @@ defmodule NixosTest.Machine do
   end
 
   @impl true
-  def handle_call(:start, _from, %{start_command: nil} = state) do
+  def handle_call(:start, _from, %{start_command: nil, qmp_socket_path: nil} = state) do
     Logger.info("starting machine #{state.name} (no start_command)")
+    {:reply, :ok, %{state | booted: true}}
+  end
+
+  def handle_call(:start, _from, %{start_command: nil, qmp_socket_path: qmp_path} = state)
+      when qmp_path != nil do
+    Logger.info("starting machine #{state.name} (connecting to existing QMP)")
+    state = connect_qmp(state, qmp_path)
     {:reply, :ok, %{state | booted: true}}
   end
 
@@ -161,7 +170,14 @@ defmodule NixosTest.Machine do
     port = Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout])
     Logger.debug("spawned process for #{state.name}")
 
-    # TODO: connect to QMP socket
+    # connect to QMP socket if path provided
+    state =
+      if state.qmp_socket_path do
+        connect_qmp(state, state.qmp_socket_path)
+      else
+        state
+      end
+
     # TODO: wait for shell connection
 
     {:reply, :ok, %{state | qemu_port: port, booted: true}}
@@ -250,6 +266,12 @@ defmodule NixosTest.Machine do
   end
 
   # Private helpers
+
+  defp connect_qmp(state, socket_path) do
+    Logger.debug("connecting to QMP at #{socket_path}")
+    {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+    %{state | qmp: qmp, connected: true}
+  end
 
   defp poll_unit_state(shell, unit, retries \\ 60) do
     cmd = "systemctl show #{unit} --property=ActiveState"

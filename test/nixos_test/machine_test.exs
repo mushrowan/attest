@@ -31,6 +31,61 @@ defmodule NixosTest.MachineTest do
       GenServer.stop(machine)
       File.rm(marker)
     end
+
+    test "start/1 connects to QMP socket" do
+      socket_path = Path.join(System.tmp_dir!(), "qmp-start-#{:rand.uniform(10000)}.sock")
+      File.rm(socket_path)
+
+      # start mock QMP server first (simulating QEMU creating the socket)
+      {:ok, listen} =
+        :gen_tcp.listen(0, [
+          :binary,
+          {:packet, :line},
+          {:active, false},
+          {:ip, {:local, socket_path}}
+        ])
+
+      test_pid = self()
+
+      spawn(fn ->
+        {:ok, client} = :gen_tcp.accept(listen, 5000)
+        # send QMP greeting
+        :ok =
+          :gen_tcp.send(
+            client,
+            ~s({"QMP": {"version": {"qemu": {"major": 8}}, "capabilities": []}}\n)
+          )
+
+        # receive qmp_capabilities, send ok
+        {:ok, cmd} = :gen_tcp.recv(client, 0, 5000)
+        send(test_pid, {:qmp_received, cmd})
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        # keep connection open
+        receive do
+          :stop -> :ok
+        end
+      end)
+
+      {:ok, machine} =
+        Machine.start_link(
+          name: "qmp-connect-test",
+          qmp_socket_path: socket_path
+        )
+
+      :ok = Machine.start(machine)
+
+      # verify QMP negotiation happened
+      assert_receive {:qmp_received, cmd}, 2000
+      assert cmd =~ "qmp_capabilities"
+
+      # machine should now have QMP connected
+      assert Machine.booted?(machine)
+
+      GenServer.stop(machine)
+      :gen_tcp.close(listen)
+      File.rm(socket_path)
+    end
   end
 
   describe "execute/2" do
