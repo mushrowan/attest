@@ -21,5 +21,14 @@ defmodule NixosTest.DriverTest do
       assert {:error, :not_found} = Driver.get_machine(pid, "nonexistent")
       GenServer.stop(pid)
     end
+
+    test "creates machines from config" do
+      {:ok, driver} = Driver.start_link(machines: [%{name: "client"}])
+
+      assert {:ok, machine_pid} = Driver.get_machine(driver, "client")
+      assert Process.alive?(machine_pid)
+
+      GenServer.stop(driver)
+    end
   end
 end

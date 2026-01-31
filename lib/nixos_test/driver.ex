@@ -53,8 +53,11 @@ defmodule NixosTest.Driver do
 
   @impl true
   def init(opts) do
+    machine_configs = Keyword.get(opts, :machines, [])
+    machines = start_machines(machine_configs)
+
     state = %__MODULE__{
-      machines: %{},
+      machines: machines,
       vlans: %{},
       test_script: Keyword.get(opts, :test_script),
       out_dir: Keyword.get(opts, :out_dir, System.tmp_dir!()),
@@ -65,6 +68,20 @@ defmodule NixosTest.Driver do
     timeout_ref = Process.send_after(self(), :global_timeout, state.global_timeout)
 
     {:ok, %{state | timeout_ref: timeout_ref}}
+  end
+
+  defp start_machines(configs) do
+    configs
+    |> Enum.map(fn config ->
+      name = Map.fetch!(config, :name)
+      opts = Map.to_list(config)
+
+      {:ok, pid} =
+        DynamicSupervisor.start_child(NixosTest.MachineSupervisor, {NixosTest.Machine, opts})
+
+      {name, pid}
+    end)
+    |> Map.new()
   end
 
   @impl true
