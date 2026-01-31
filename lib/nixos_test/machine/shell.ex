@@ -14,6 +14,131 @@ defmodule NixosTest.Machine.Shell do
   4. Recv: `<exit code>\n`
   """
 
+  use GenServer
+  require Logger
+
+  defstruct [:socket_path, :listen_socket, :socket, connected: false]
+
+  @backdoor_ready "Spawning backdoor root shell..."
+
+  # Client API
+
+  @doc """
+  Start a Shell server that listens on the given socket path.
+  """
+  def start_link(opts) do
+    socket_path = Keyword.fetch!(opts, :socket_path)
+    GenServer.start_link(__MODULE__, socket_path, Keyword.take(opts, [:name]))
+  end
+
+  @doc """
+  Wait for the guest to connect to the shell backdoor.
+  """
+  @spec wait_for_connection(GenServer.server(), timeout()) :: :ok | {:error, term()}
+  def wait_for_connection(server, timeout \\ 30_000) do
+    GenServer.call(server, :wait_for_connection, timeout)
+  end
+
+  @doc """
+  Execute a command in the guest and return the result.
+  """
+  @spec execute(GenServer.server(), String.t(), timeout()) ::
+          {:ok, String.t(), non_neg_integer()} | {:error, term()}
+  def execute(server, command, timeout \\ 900_000) do
+    GenServer.call(server, {:execute, command}, timeout)
+  end
+
+  # Server callbacks
+
+  @impl true
+  def init(socket_path) do
+    # ensure clean socket
+    File.rm(socket_path)
+
+    case :gen_tcp.listen(0, [
+           :binary,
+           {:packet, :line},
+           {:active, false},
+           {:ip, {:local, socket_path}}
+         ]) do
+      {:ok, listen_socket} ->
+        Logger.info("shell listening on #{socket_path}")
+        {:ok, %__MODULE__{socket_path: socket_path, listen_socket: listen_socket}}
+
+      {:error, reason} ->
+        {:stop, reason}
+    end
+  end
+
+  @impl true
+  def handle_call(:wait_for_connection, _from, %{listen_socket: listen, connected: false} = state) do
+    case :gen_tcp.accept(listen, 30_000) do
+      {:ok, socket} ->
+        case wait_for_backdoor_ready(socket) do
+          :ok ->
+            Logger.info("shell backdoor connected")
+            {:reply, :ok, %{state | socket: socket, connected: true}}
+
+          {:error, reason} ->
+            :gen_tcp.close(socket)
+            {:reply, {:error, reason}, state}
+        end
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call(:wait_for_connection, _from, %{connected: true} = state) do
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:execute, command}, _from, %{socket: socket, connected: true} = state) do
+    result = do_execute(socket, command)
+    {:reply, result, state}
+  end
+
+  @impl true
+  def terminate(_reason, %{socket: socket, listen_socket: listen}) do
+    if socket, do: :gen_tcp.close(socket)
+    if listen, do: :gen_tcp.close(listen)
+    :ok
+  end
+
+  # Private helpers
+
+  defp wait_for_backdoor_ready(socket) do
+    case :gen_tcp.recv(socket, 0, 30_000) do
+      {:ok, line} ->
+        if String.contains?(line, @backdoor_ready) do
+          :ok
+        else
+          # keep reading until we see the ready message
+          wait_for_backdoor_ready(socket)
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp do_execute(socket, command) do
+    # send command
+    :ok = :gen_tcp.send(socket, format_command(command))
+
+    # receive base64 output
+    {:ok, output_line} = :gen_tcp.recv(socket, 0, 900_000)
+
+    # request exit code
+    :ok = :gen_tcp.send(socket, "echo ${PIPESTATUS[0]}\n")
+
+    # receive exit code
+    {:ok, exit_code_line} = :gen_tcp.recv(socket, 0, 5000)
+
+    parse_output(String.trim_trailing(output_line), exit_code_line)
+  end
+
   @doc """
   Format a command for execution over the shell backdoor.
 
