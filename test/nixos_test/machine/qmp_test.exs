@@ -120,4 +120,56 @@ defmodule NixosTest.Machine.QMPTest do
       end)
     end
   end
+
+  describe "command/3" do
+    test "sends command and receives success response" do
+      responses = [
+        # qmp_capabilities response
+        ~s({"return": {}}),
+        # query-status response
+        ~s({"return": {"status": "running", "singlestep": false}})
+      ]
+
+      with_mock_qmp(responses, fn socket_path ->
+        {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+
+        assert {:ok, result} = QMP.command(qmp, "query-status")
+        assert result["status"] == "running"
+
+        GenServer.stop(qmp)
+      end)
+    end
+
+    test "sends command with arguments" do
+      responses = [
+        ~s({"return": {}}),
+        ~s({"return": {}})
+      ]
+
+      with_mock_qmp(responses, fn socket_path ->
+        {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+
+        assert {:ok, %{}} = QMP.command(qmp, "screendump", %{"filename" => "/tmp/shot.ppm"})
+
+        GenServer.stop(qmp)
+      end)
+    end
+
+    test "returns error for failed command" do
+      responses = [
+        ~s({"return": {}}),
+        ~s({"error": {"class": "GenericError", "desc": "file not found"}})
+      ]
+
+      with_mock_qmp(responses, fn socket_path ->
+        {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+
+        assert {:error, error} = QMP.command(qmp, "screendump", %{"filename" => "/nonexistent"})
+        assert error.class == "GenericError"
+        assert error.desc == "file not found"
+
+        GenServer.stop(qmp)
+      end)
+    end
+  end
 end

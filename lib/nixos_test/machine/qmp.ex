@@ -89,6 +89,17 @@ defmodule NixosTest.Machine.QMP do
     GenServer.start_link(__MODULE__, socket_path, Keyword.take(opts, [:name]))
   end
 
+  @doc """
+  Send a command and wait for the response.
+
+  Returns `{:ok, result}` on success or `{:error, reason}` on failure.
+  """
+  @spec command(GenServer.server(), String.t(), map()) ::
+          {:ok, map()} | {:error, Error.t() | term()}
+  def command(server, cmd, args \\ %{}) do
+    GenServer.call(server, {:command, cmd, args})
+  end
+
   # Server callbacks
 
   @impl true
@@ -101,6 +112,16 @@ defmodule NixosTest.Machine.QMP do
 
       {:error, reason} ->
         {:stop, reason}
+    end
+  end
+
+  @impl true
+  def handle_call({:command, cmd, args}, _from, %{socket: socket} = state) do
+    :ok = :gen_tcp.send(socket, encode_command(cmd, args))
+
+    case recv_response(socket) do
+      {:ok, result} -> {:reply, {:ok, result}, state}
+      {:error, error} -> {:reply, {:error, error}, state}
     end
   end
 
