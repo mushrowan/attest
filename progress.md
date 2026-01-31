@@ -1,16 +1,16 @@
 # progress log
 
-## 2026-01-31: Driver creates machines from config
+## 2026-01-31: Driver.start_all boots machines
 
 ### done
-- **Driver.init** now accepts `machines: [%{name: "client", ...}]` option
-- creates Machine GenServers under MachineSupervisor (not linked to Driver)
-- `get_machine/2` returns `{:ok, pid}` for machines created from config
-- 33 tests total, all passing
+- **Driver.start_all/1** calls `Machine.start` on all machines in parallel via `Task.async_stream`
+- **Machine.booted?/1** query function added
+- **Machine.start/1** now sets `booted: true` (stub for real QEMU start)
+- 34 tests total, all passing
 
 ### next steps
 1. implement actual VM lifecycle (start QEMU process)
-2. make `start_all/1` call Machine.start on each machine
+2. test machines cleaned up on Driver terminate
 3. add integration tests with real QEMU
 
 ---
