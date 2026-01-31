@@ -154,12 +154,15 @@ defmodule NixosTest.Machine do
   end
 
   @impl true
-  def handle_call(:stop, _from, state) do
-    Logger.info("stopping machine #{state.name}")
-
-    # TODO: graceful shutdown via QMP
-
+  def handle_call(:stop, _from, %{qmp: nil} = state) do
+    Logger.info("stopping machine #{state.name} (no QMP)")
     {:reply, :ok, %{state | booted: false, connected: false}}
+  end
+
+  def handle_call(:stop, _from, %{qmp: qmp} = state) do
+    Logger.info("stopping machine #{state.name}")
+    {:ok, _} = QMP.command(qmp, "quit")
+    {:reply, :ok, %{state | booted: false, connected: false, qmp: nil, shell: nil}}
   end
 
   @impl true
