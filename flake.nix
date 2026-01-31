@@ -44,7 +44,7 @@
           packageSet = import ./nix/package.nix {
             inherit pkgs beamPackages elixir;
           };
-          inherit (packageSet) nixos-test mixFodDeps;
+          inherit (packageSet) nixos-test mixFodDeps mixFodDepsAll;
         in
         {
           checks = {
@@ -65,11 +65,14 @@
                   touch $out
                 '';
 
-            # mix test - run in the package build since it has deps set up
-            test = nixos-test.overrideAttrs (old: {
+            # mix test - use all deps (including test deps)
+            test = beamPackages.mixRelease {
               pname = "nixos-test-tests";
+              version = "0.1.0";
+              src = ./.;
+              inherit elixir;
+              mixFodDeps = mixFodDepsAll;
 
-              # override to run tests instead of building
               buildPhase = ''
                 runHook preBuild
                 MIX_ENV=test mix compile --no-deps-check
@@ -85,7 +88,7 @@
               installPhase = ''
                 touch $out
               '';
-            });
+            };
           };
 
           packages = {

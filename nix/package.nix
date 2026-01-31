@@ -32,7 +32,7 @@ let
     pname = "${pname}-all-deps";
     inherit version src elixir;
     mixEnv = ""; # empty = all deps
-    hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+    hash = "sha256-DfZ0GtQInaK04JxgjarPtLsS1JHC288PNc9Idum3rW4=";
   };
 
   # build the release
@@ -76,5 +76,5 @@ let
   };
 in
 {
-  inherit nixos-test mixFodDeps;
+  inherit nixos-test mixFodDeps mixFodDepsAll;
 }
