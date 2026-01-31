@@ -1,31 +1,28 @@
 # progress log
 
-## 2026-01-31: implement QMP and Shell
+## 2026-01-31: integrate QMP + Shell into Machine
 
 ### done
-- **Machine.QMP** (GenServer): QMP protocol client
-  - parse_message/1: greeting, success, error, event messages
-  - encode_command/2: command encoding with args
-  - start_link/1: connect to socket, negotiate capabilities
-  - command/3: send command, receive response
-  - 12 tests with real unix sockets
-- **Machine.Shell** (GenServer): shell backdoor client
-  - format_command/1: wrap command with base64 encoding
-  - parse_output/2: decode base64 output + exit code
-  - start_link/1: create listen socket
-  - wait_for_connection/2: accept, wait for backdoor ready
-  - execute/2: send command, receive output
-  - 8 tests with real unix sockets
+- **Machine GenServer** now delegates to QMP/Shell:
+  - execute/2 → Shell.execute (returns `{exit_code, output}`)
+  - screenshot/2 → QMP.command("screendump", ...)
+  - stop/1 → QMP.command("quit")
+  - wait_for_unit/3 → polls systemctl until active/failed
+  - wait_for_open_port/3 → polls nc -z until port open
+- accepts injected QMP/Shell pids for testing
+- crashes with descriptive errors when not connected
+- 32 tests total, all passing
 
 ### next steps
-1. integrate QMP + Shell into Machine GenServer
-2. implement actual VM lifecycle (start QEMU process)
-3. implement Driver test coordination
-4. add integration tests with real QEMU
+1. implement actual VM lifecycle (start QEMU process)
+2. implement Driver test coordination
+3. add integration tests with real QEMU
 
 ---
 
 ## 2026-01-31: earlier (condensed)
 
-- fix flake test check: added mixFodDepsAll, removed broken doctest
-- project setup: flake-parts + treefmt, elixir 1.17, module stubs, 6 tests
+- Machine.QMP: parse/encode messages, connect + negotiate, command/3
+- Machine.Shell: format/parse commands, listen socket, execute/2
+- fix flake test check: added mixFodDepsAll
+- project setup: flake-parts, elixir 1.17
