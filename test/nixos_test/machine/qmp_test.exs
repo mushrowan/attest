@@ -3,6 +3,58 @@ defmodule NixosTest.Machine.QMPTest do
 
   alias NixosTest.Machine.QMP
 
+  # helper to create a mock QMP server
+  defp with_mock_qmp(responses, fun) do
+    # create temp socket path
+    socket_path = Path.join(System.tmp_dir!(), "qmp-test-#{:rand.uniform(100_000)}.sock")
+
+    # ensure clean state
+    File.rm(socket_path)
+
+    # start listening
+    {:ok, listen} =
+      :gen_tcp.listen(0, [
+        :binary,
+        {:packet, :line},
+        {:active, false},
+        {:ip, {:local, socket_path}}
+      ])
+
+    # spawn mock server
+    parent = self()
+
+    server =
+      spawn_link(fn ->
+        {:ok, client} = :gen_tcp.accept(listen)
+        # send greeting
+        :ok =
+          :gen_tcp.send(
+            client,
+            ~s({"QMP": {"version": {"qemu": {"major": 8}}, "capabilities": []}}\n)
+          )
+
+        # handle request/response pairs
+        Enum.each(responses, fn response ->
+          {:ok, _request} = :gen_tcp.recv(client, 0, 5000)
+          :ok = :gen_tcp.send(client, response <> "\n")
+        end)
+
+        send(parent, :server_done)
+        # keep alive until test ends
+        receive do
+          :stop -> :ok
+        end
+      end)
+
+    try do
+      fun.(socket_path)
+    after
+      send(server, :stop)
+      :gen_tcp.close(listen)
+      File.rm(socket_path)
+    end
+  end
+
   describe "parse_message/1" do
     test "parses QMP greeting" do
       greeting =
@@ -52,6 +104,20 @@ defmodule NixosTest.Machine.QMPTest do
       decoded = Jason.decode!(json)
       assert decoded["execute"] == "query-status"
       refute Map.has_key?(decoded, "arguments")
+    end
+  end
+
+  describe "connect/1" do
+    test "connects and negotiates capabilities" do
+      with_mock_qmp([~s({"return": {}})], fn socket_path ->
+        {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+        assert Process.alive?(qmp)
+
+        # wait for server to finish handshake
+        assert_receive :server_done, 1000
+
+        GenServer.stop(qmp)
+      end)
     end
   end
 end

@@ -1,6 +1,6 @@
 defmodule NixosTest.Machine.QMP do
   @moduledoc """
-  QEMU Machine Protocol (QMP) client.
+  QEMU Machine Protocol (QMP) client GenServer.
 
   QMP is a JSON-based protocol for communicating with QEMU. It provides:
   - VM control (start, stop, pause, resume)
@@ -17,6 +17,11 @@ defmodule NixosTest.Machine.QMP do
   - Error: `{"error": {"class": "...", "desc": "..."}}`
   - Event: `{"event": "NAME", "timestamp": {...}, "data": {...}}`
   """
+
+  use GenServer
+  require Logger
+
+  defstruct [:socket, :socket_path, events: []]
 
   defmodule Error do
     @moduledoc "QMP error response"
@@ -72,5 +77,83 @@ defmodule NixosTest.Machine.QMP do
 
   def encode_command(cmd, args) do
     Jason.encode!(%{"execute" => cmd, "arguments" => args}) <> "\n"
+  end
+
+  # Client API
+
+  @doc """
+  Start a QMP client connected to the given socket path.
+  """
+  def start_link(opts) do
+    socket_path = Keyword.fetch!(opts, :socket_path)
+    GenServer.start_link(__MODULE__, socket_path, Keyword.take(opts, [:name]))
+  end
+
+  # Server callbacks
+
+  @impl true
+  def init(socket_path) do
+    # connect synchronously during init
+    case connect_and_negotiate(socket_path) do
+      {:ok, socket} ->
+        Logger.info("QMP connected to #{socket_path}")
+        {:ok, %__MODULE__{socket: socket, socket_path: socket_path}}
+
+      {:error, reason} ->
+        {:stop, reason}
+    end
+  end
+
+  @impl true
+  def terminate(_reason, %{socket: socket}) when not is_nil(socket) do
+    :gen_tcp.close(socket)
+  end
+
+  def terminate(_reason, _state), do: :ok
+
+  # Private helpers
+
+  defp connect_and_negotiate(socket_path) do
+    with {:ok, socket} <- connect(socket_path),
+         {:ok, _greeting} <- recv_greeting(socket),
+         :ok <- send_capabilities(socket),
+         {:ok, _response} <- recv_response(socket) do
+      {:ok, socket}
+    end
+  end
+
+  defp connect(socket_path) do
+    :gen_tcp.connect({:local, socket_path}, 0, [:binary, {:packet, :line}, {:active, false}])
+  end
+
+  defp recv_greeting(socket) do
+    case :gen_tcp.recv(socket, 0, 5000) do
+      {:ok, line} ->
+        case parse_message(String.trim_trailing(line)) do
+          {:greeting, version} -> {:ok, version}
+          other -> {:error, {:unexpected_message, other}}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp send_capabilities(socket) do
+    :gen_tcp.send(socket, encode_command("qmp_capabilities"))
+  end
+
+  defp recv_response(socket) do
+    case :gen_tcp.recv(socket, 0, 5000) do
+      {:ok, line} ->
+        case parse_message(String.trim_trailing(line)) do
+          {:ok, result} -> {:ok, result}
+          {:error, error} -> {:error, error}
+          other -> {:error, {:unexpected_message, other}}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 end
