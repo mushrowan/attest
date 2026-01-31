@@ -166,4 +166,77 @@ defmodule NixosTest.MachineTest do
       File.rm(socket_path)
     end
   end
+
+  describe "wait_for_unit/3" do
+    test "polls until unit is active" do
+      socket_path = Path.join(System.tmp_dir!(), "shell-wait-#{:rand.uniform(10000)}.sock")
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      test_pid = self()
+
+      # mock guest that returns "activating" then "active"
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [:binary, {:packet, :line}, {:active, false}])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        # first poll - activating
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("ActiveState=activating\n") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+
+        # second poll - active
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("ActiveState=active\n") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+
+        send(test_pid, :mock_done)
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+      {:ok, machine} = Machine.start_link(name: "wait-unit-test", shell: shell)
+
+      assert :ok = Machine.wait_for_unit(machine, "nginx.service", 5000)
+
+      assert_receive :mock_done, 1000
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+
+    test "raises on failed unit" do
+      socket_path = Path.join(System.tmp_dir!(), "shell-fail-#{:rand.uniform(10000)}.sock")
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [:binary, {:packet, :line}, {:active, false}])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        # return failed state
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("ActiveState=failed\n") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+      {:ok, machine} = Machine.start_link(name: "wait-fail-test", shell: shell)
+
+      Process.flag(:trap_exit, true)
+      catch_exit(Machine.wait_for_unit(machine, "bad.service", 5000))
+
+      assert_receive {:EXIT, ^machine, {%RuntimeError{message: msg}, _}}, 1000
+      assert msg =~ "failed"
+
+      File.rm(socket_path)
+    end
+  end
 end

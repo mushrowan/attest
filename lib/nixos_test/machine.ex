@@ -178,13 +178,10 @@ defmodule NixosTest.Machine do
   end
 
   @impl true
-  def handle_call({:wait_for_unit, unit}, _from, state) do
+  def handle_call({:wait_for_unit, unit}, _from, %{shell: shell} = state) do
     Logger.info("waiting for unit #{unit} on #{state.name}")
-
-    # TODO: poll systemctl until unit is active
-    # retry with backoff until timeout
-
-    {:reply, {:error, :not_implemented}, state}
+    result = poll_unit_state(shell, unit)
+    {:reply, result, state}
   end
 
   @impl true
@@ -224,5 +221,34 @@ defmodule NixosTest.Machine do
     end
 
     :ok
+  end
+
+  # Private helpers
+
+  defp poll_unit_state(shell, unit, retries \\ 60) do
+    cmd = "systemctl show #{unit} --property=ActiveState"
+    {:ok, output, _exit_code} = Shell.execute(shell, cmd)
+
+    case parse_unit_state(output) do
+      "active" ->
+        :ok
+
+      "failed" ->
+        raise "unit #{unit} reached state failed"
+
+      _other when retries > 0 ->
+        Process.sleep(1000)
+        poll_unit_state(shell, unit, retries - 1)
+
+      other ->
+        raise "unit #{unit} did not become active (last state: #{other})"
+    end
+  end
+
+  defp parse_unit_state(output) do
+    case Regex.run(~r/ActiveState=(\w+)/, output) do
+      [_, state] -> state
+      _ -> "unknown"
+    end
   end
 end
