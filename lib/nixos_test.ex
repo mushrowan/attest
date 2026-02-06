@@ -279,6 +279,22 @@ defmodule NixosTest do
   end
 
   @doc """
+  Create a VM snapshot (firecracker only)
+  """
+  @spec snapshot_create(GenServer.server(), String.t()) :: :ok | {:error, term()}
+  def snapshot_create(machine, snapshot_dir) do
+    Machine.snapshot_create(machine, snapshot_dir)
+  end
+
+  @doc """
+  Restore a VM from a snapshot (firecracker only)
+  """
+  @spec snapshot_restore(GenServer.server(), String.t()) :: :ok | {:error, term()}
+  def snapshot_restore(machine, snapshot_dir) do
+    Machine.snapshot_restore(machine, snapshot_dir)
+  end
+
+  @doc """
   Send raw characters to the kernel serial console.
   """
   @spec send_console(GenServer.server(), String.t()) :: :ok | {:error, term()}
