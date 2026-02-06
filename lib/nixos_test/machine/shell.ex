@@ -103,26 +103,11 @@ defmodule NixosTest.Machine.Shell do
   # Private helpers
 
   defp do_execute(socket, command) do
-    case :gen_tcp.send(socket, format_command(command)) do
-      :ok ->
-        case :gen_tcp.recv(socket, 0, 900_000) do
-          {:ok, output_line} ->
-            :ok = :gen_tcp.send(socket, "echo ${PIPESTATUS[0]}\n")
-
-            case :gen_tcp.recv(socket, 0, 5000) do
-              {:ok, exit_code_line} ->
-                parse_output(String.trim_trailing(output_line), exit_code_line)
-
-              {:error, reason} ->
-                {:error, reason}
-            end
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
+    with :ok <- :gen_tcp.send(socket, format_command(command)),
+         {:ok, output_line} <- :gen_tcp.recv(socket, 0, 900_000),
+         :ok <- :gen_tcp.send(socket, "echo ${PIPESTATUS[0]}\n"),
+         {:ok, exit_code_line} <- :gen_tcp.recv(socket, 0, 5000) do
+      parse_output(String.trim_trailing(output_line), exit_code_line)
     end
   end
 

@@ -2,8 +2,8 @@ defmodule NixosTest.MachineTest do
   use ExUnit.Case
 
   alias NixosTest.Machine
-  alias NixosTest.Machine.{QMP, Shell}
   alias NixosTest.Machine.Backend
+  alias NixosTest.Machine.{QMP, Shell}
 
   describe "Machine" do
     test "can start a machine process" do

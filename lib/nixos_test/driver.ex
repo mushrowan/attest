@@ -61,7 +61,7 @@ defmodule NixosTest.Driver do
       vlans: %{},
       test_script: Keyword.get(opts, :test_script),
       out_dir: Keyword.get(opts, :out_dir, System.tmp_dir!()),
-      global_timeout: Keyword.get(opts, :global_timeout, 3600_000)
+      global_timeout: Keyword.get(opts, :global_timeout, 3_600_000)
     }
 
     # start global timeout timer
