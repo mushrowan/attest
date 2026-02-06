@@ -47,6 +47,16 @@ defmodule NixosTest.Machine.Shell do
   end
 
   @doc """
+  Reconnect to the shell after a reboot
+
+  Closes the current socket and waits for a new connection from the guest.
+  """
+  @spec reconnect(GenServer.server(), timeout()) :: :ok | {:error, term()}
+  def reconnect(server, timeout \\ 30_000) do
+    GenServer.call(server, {:reconnect, timeout}, timeout + 5000)
+  end
+
+  @doc """
   Execute a command in the guest and return the result
   """
   @spec execute(GenServer.server(), String.t(), timeout()) ::
@@ -84,6 +94,22 @@ defmodule NixosTest.Machine.Shell do
 
   def handle_call({:wait_for_connection, _timeout}, _from, %{connected: true} = state) do
     {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:reconnect, timeout}, _from, state) do
+    # close old socket if present
+    if state.socket do
+      state.transport.close(state.socket)
+    end
+
+    case state.transport.connect(state.transport_config, timeout) do
+      {:ok, socket} ->
+        {:reply, :ok, %{state | socket: socket, connected: true}}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, %{state | socket: nil, connected: false}}
+    end
   end
 
   @impl true

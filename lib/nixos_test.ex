@@ -214,11 +214,11 @@ defmodule NixosTest do
   end
 
   @doc """
-  Reboot the VM by sending ctrl-alt-delete.
+  Reboot the VM by sending ctrl-alt-delete and wait for shell reconnect.
   """
-  @spec reboot(GenServer.server()) :: :ok | {:error, term()}
-  def reboot(machine) do
-    Machine.reboot(machine)
+  @spec reboot(GenServer.server(), timeout()) :: :ok | {:error, term()}
+  def reboot(machine, timeout \\ 120_000) do
+    Machine.reboot(machine, timeout)
   end
 
   @doc """

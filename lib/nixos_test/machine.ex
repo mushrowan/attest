@@ -397,12 +397,12 @@ defmodule NixosTest.Machine do
   @doc """
   Reboot the VM by sending ctrl-alt-delete
 
-  Sets the machine to disconnected state. The shell will need to
-  reconnect when the VM finishes rebooting.
+  Sends ctrl-alt-delete, then waits for the shell to reconnect.
+  The VM must have been started without -no-reboot for this to work.
   """
-  @spec reboot(GenServer.server()) :: :ok | {:error, term()}
-  def reboot(machine) do
-    GenServer.call(machine, :reboot)
+  @spec reboot(GenServer.server(), timeout()) :: :ok | {:error, term()}
+  def reboot(machine, timeout \\ 120_000) do
+    GenServer.call(machine, {:reboot, timeout}, timeout + 30_000)
   end
 
   @doc """
@@ -653,15 +653,29 @@ defmodule NixosTest.Machine do
   end
 
   @impl true
-  def handle_call(:reboot, _from, state) do
+  def handle_call({:reboot, timeout}, _from, state) do
     Logger.info("rebooting #{state.name}")
 
-    case state.backend_mod.send_key(state.backend_state, "ctrl-alt-delete") do
-      :ok ->
-        {:reply, :ok, %{state | connected: false, booted: false}}
+    with :ok <- state.backend_mod.send_key(state.backend_state, "ctrl-alt-delete") do
+      state = %{state | connected: false}
 
-      {:error, _} = err ->
-        {:reply, err, state}
+      if state.shell do
+        Logger.info("waiting for shell reconnect on #{state.name}")
+
+        case Shell.reconnect(state.shell, timeout) do
+          :ok ->
+            Logger.info("shell reconnected on #{state.name}")
+            {:reply, :ok, %{state | connected: true}}
+
+          {:error, reason} ->
+            Logger.warning("shell reconnect failed on #{state.name}: #{inspect(reason)}")
+            {:reply, {:error, {:reconnect_failed, reason}}, state}
+        end
+      else
+        {:reply, :ok, state}
+      end
+    else
+      {:error, _} = err -> {:reply, err, state}
     end
   end
 

@@ -1165,18 +1165,21 @@ defmodule NixosTest.MachineTest do
   end
 
   describe "reboot/2" do
-    test "reboot sends ctrl-alt-delete and marks disconnected" do
-      socket_path =
+    test "reboot sends ctrl-alt-delete and reconnects shell" do
+      qmp_socket_path =
         Path.join(System.tmp_dir!(), "qmp-reboot-#{:rand.uniform(100_000)}.sock")
 
-      File.rm(socket_path)
+      shell_socket_path =
+        Path.join(System.tmp_dir!(), "shell-reboot-#{:rand.uniform(100_000)}.sock")
+
+      File.rm(qmp_socket_path)
 
       {:ok, listen} =
         :gen_tcp.listen(0, [
           :binary,
           {:packet, :line},
           {:active, false},
-          {:ip, {:local, socket_path}}
+          {:ip, {:local, qmp_socket_path}}
         ])
 
       test_pid = self()
@@ -1204,19 +1207,67 @@ defmodule NixosTest.MachineTest do
         end
       end)
 
-      {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+      {:ok, qmp} = QMP.start_link(socket_path: qmp_socket_path)
+      {:ok, shell} = Shell.start_link(socket_path: shell_socket_path)
+
+      # initial shell connection
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, shell_socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        # respond to pre-reboot command
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("before") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+
+        :gen_tcp.close(sock)
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
 
       {:ok, machine} =
         Machine.start_link(
           name: "reboot-test",
           backend: Backend.Mock,
-          qmp: qmp
+          qmp: qmp,
+          shell: shell
         )
 
       :ok = Machine.start(machine)
 
-      # reboot sends ctrl-alt-delete and sets connected=false
-      assert :ok = Machine.reboot(machine)
+      # verify shell works before reboot
+      assert {0, "before"} = Machine.execute(machine, "echo before")
+
+      # simulate post-reboot guest reconnecting
+      spawn(fn ->
+        Process.sleep(100)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, shell_socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("after reboot") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+      end)
+
+      # reboot should send ctrl-alt-delete and reconnect
+      assert :ok = Machine.reboot(machine, 5000)
 
       assert_receive {:qmp_reboot, cmd}, 1000
       assert cmd =~ "send-key"
@@ -1224,10 +1275,14 @@ defmodule NixosTest.MachineTest do
       assert cmd =~ "alt"
       assert cmd =~ "delete"
 
+      # shell works after reboot
+      assert {0, "after reboot"} = Machine.execute(machine, "echo test")
+
       GenServer.stop(machine)
       GenServer.stop(qmp)
       :gen_tcp.close(listen)
-      File.rm(socket_path)
+      File.rm(qmp_socket_path)
+      File.rm(shell_socket_path)
     end
 
     test "reboot without QMP returns unsupported" do
@@ -1238,6 +1293,67 @@ defmodule NixosTest.MachineTest do
       assert {:error, :unsupported} = Machine.reboot(machine)
 
       GenServer.stop(machine)
+    end
+  end
+
+  describe "shell reconnect (for reboot)" do
+    test "Shell.reconnect/2 accepts a new connection on the same socket" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-reconnect-#{:rand.uniform(100_000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      # first connection
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        # respond to one command
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("hello") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+
+        # close to simulate guest going down
+        :gen_tcp.close(sock)
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+      assert {:ok, "hello", 0} = Shell.execute(shell, "echo hello")
+
+      # now simulate reboot: reconnect
+      # a new guest connects to the same socket path
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("after reboot") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+      end)
+
+      assert :ok = Shell.reconnect(shell, 5000)
+      assert {:ok, "after reboot", 0} = Shell.execute(shell, "echo test")
+
+      GenServer.stop(shell)
+      File.rm(socket_path)
     end
   end
 
