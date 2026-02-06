@@ -142,6 +142,96 @@ defmodule NixosTest.Machine do
   end
 
   @doc """
+  Retry a command until it succeeds (exit code 0)
+
+  Returns the command output on success, raises on timeout.
+  """
+  @spec wait_until_succeeds(GenServer.server(), String.t(), keyword()) :: String.t()
+  def wait_until_succeeds(machine, command, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 900_000)
+    interval = Keyword.get(opts, :interval, 1000)
+    deadline = System.monotonic_time(:millisecond) + timeout
+
+    do_retry_until(machine, command, :succeed, interval, deadline)
+  end
+
+  @doc """
+  Retry a command until it fails (non-zero exit code)
+
+  Returns the command output on failure, raises on timeout.
+  """
+  @spec wait_until_fails(GenServer.server(), String.t(), keyword()) :: String.t()
+  def wait_until_fails(machine, command, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 900_000)
+    interval = Keyword.get(opts, :interval, 1000)
+    deadline = System.monotonic_time(:millisecond) + timeout
+
+    do_retry_until(machine, command, :fail, interval, deadline)
+  end
+
+  defp do_retry_until(machine, command, mode, interval, deadline) do
+    result = execute(machine, command)
+
+    if retry_done?(result, mode) do
+      extract_output(result)
+    else
+      retry_or_raise(machine, command, mode, interval, deadline, result)
+    end
+  end
+
+  defp retry_done?({0, _output}, :succeed), do: true
+  defp retry_done?({code, _output}, :fail) when is_integer(code) and code != 0, do: true
+  defp retry_done?(_result, _mode), do: false
+
+  defp extract_output({_code, output}) when is_binary(output), do: output
+
+  defp retry_or_raise(machine, command, mode, interval, deadline, last_result) do
+    if System.monotonic_time(:millisecond) >= deadline do
+      raise retry_timeout_message(mode, last_result)
+    else
+      Process.sleep(interval)
+      do_retry_until(machine, command, mode, interval, deadline)
+    end
+  end
+
+  defp retry_timeout_message(mode, last_result) do
+    {code, output} =
+      case last_result do
+        {c, o} when is_integer(c) -> {c, o}
+        {:error, reason} -> {-1, inspect(reason)}
+      end
+
+    verb = if mode == :succeed, do: "succeed", else: "fail"
+    "command did not #{verb} within timeout (last exit: #{code}, output: #{output})"
+  end
+
+  @doc """
+  Wait for a file to exist in the guest
+  """
+  @spec wait_for_file(GenServer.server(), String.t(), keyword()) :: :ok
+  def wait_for_file(machine, path, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 900_000)
+    wait_until_succeeds(machine, "test -e #{path}", timeout: timeout)
+    :ok
+  end
+
+  @doc """
+  Run a systemctl command and return {exit_code, output}
+  """
+  @spec systemctl(GenServer.server(), String.t()) :: execute_result()
+  def systemctl(machine, args) do
+    execute(machine, "systemctl #{args}")
+  end
+
+  @doc """
+  Force-crash the VM (immediate quit, no graceful shutdown)
+  """
+  @spec crash(GenServer.server()) :: :ok | {:error, term()}
+  def crash(machine) do
+    halt(machine, 5000)
+  end
+
+  @doc """
   Wait for a systemd unit to become active
   """
   @spec wait_for_unit(GenServer.server(), String.t(), timeout()) :: :ok | {:error, term()}

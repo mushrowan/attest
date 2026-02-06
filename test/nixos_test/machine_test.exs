@@ -225,6 +225,108 @@ defmodule NixosTest.MachineTest do
     end
   end
 
+  describe "wait_until_succeeds/3" do
+    test "retries until command succeeds" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-retry-ok-#{:rand.uniform(10000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      test_pid = self()
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        # first attempt: fail (exit code 1)
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("nope") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "1\n")
+
+        # second attempt: succeed (exit code 0)
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("yes") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+
+        send(test_pid, :mock_done)
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "wait-succeed-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert "yes" = Machine.wait_until_succeeds(machine, "test cmd", timeout: 5000)
+
+      assert_receive :mock_done, 1000
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+  end
+
+  describe "wait_until_fails/3" do
+    test "retries until command fails" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-retry-fail-#{:rand.uniform(10000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      test_pid = self()
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        # first attempt: succeed (exit code 0) - not what we want
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("still up") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+
+        # second attempt: fail (exit code 1) - what we want
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("gone") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "1\n")
+
+        send(test_pid, :mock_done)
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "wait-fail-cmd-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert "gone" = Machine.wait_until_fails(machine, "test cmd", timeout: 5000)
+
+      assert_receive :mock_done, 1000
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+  end
+
   describe "screenshot/2" do
     test "delegates to backend screenshot" do
       socket_path = Path.join(System.tmp_dir!(), "qmp-test-#{:rand.uniform(10000)}.sock")

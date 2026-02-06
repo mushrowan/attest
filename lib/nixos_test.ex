@@ -98,6 +98,46 @@ defmodule NixosTest do
   end
 
   @doc """
+  Retry a command until it succeeds (exit code 0).
+  """
+  @spec wait_until_succeeds(GenServer.server(), String.t(), keyword()) :: String.t()
+  def wait_until_succeeds(machine, command, opts \\ []) do
+    Machine.wait_until_succeeds(machine, command, opts)
+  end
+
+  @doc """
+  Retry a command until it fails (non-zero exit code).
+  """
+  @spec wait_until_fails(GenServer.server(), String.t(), keyword()) :: String.t()
+  def wait_until_fails(machine, command, opts \\ []) do
+    Machine.wait_until_fails(machine, command, opts)
+  end
+
+  @doc """
+  Wait for a file to exist in the guest.
+  """
+  @spec wait_for_file(GenServer.server(), String.t(), keyword()) :: :ok
+  def wait_for_file(machine, path, opts \\ []) do
+    Machine.wait_for_file(machine, path, opts)
+  end
+
+  @doc """
+  Run a systemctl command.
+  """
+  @spec systemctl(GenServer.server(), String.t()) :: Machine.execute_result()
+  def systemctl(machine, args) do
+    Machine.systemctl(machine, args)
+  end
+
+  @doc """
+  Force-crash the VM.
+  """
+  @spec crash(GenServer.server()) :: :ok | {:error, term()}
+  def crash(machine) do
+    Machine.crash(machine)
+  end
+
+  @doc """
   Send a key combination to the VM (e.g. "ctrl-alt-delete", "ret").
   """
   @spec send_key(GenServer.server(), String.t()) :: :ok | {:error, term()}
