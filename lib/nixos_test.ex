@@ -222,6 +222,63 @@ defmodule NixosTest do
   end
 
   @doc """
+  Read the text content of a virtual terminal.
+  """
+  @spec get_tty_text(GenServer.server(), pos_integer()) :: {:ok, String.t()} | {:error, term()}
+  def get_tty_text(machine, tty \\ 1) do
+    Machine.get_tty_text(machine, tty)
+  end
+
+  @doc """
+  Poll a virtual terminal until its content matches a regex.
+  """
+  @spec wait_until_tty_matches(GenServer.server(), pos_integer(), Regex.t(), keyword()) ::
+          {:ok, String.t()} | {:error, :timeout}
+  def wait_until_tty_matches(machine, tty, regex, opts \\ []) do
+    Machine.wait_until_tty_matches(machine, tty, regex, opts)
+  end
+
+  @doc """
+  Wait for a TCP port to be closed.
+  """
+  @spec wait_for_closed_port(GenServer.server(), non_neg_integer(), keyword()) :: :ok
+  def wait_for_closed_port(machine, port, opts \\ []) do
+    Machine.wait_for_closed_port(machine, port, opts)
+  end
+
+  @doc """
+  Wait for a unix domain socket to exist.
+  """
+  @spec wait_for_open_unix_socket(GenServer.server(), String.t(), keyword()) :: :ok
+  def wait_for_open_unix_socket(machine, path, opts \\ []) do
+    Machine.wait_for_open_unix_socket(machine, path, opts)
+  end
+
+  @doc """
+  Start a systemd unit.
+  """
+  @spec start_job(GenServer.server(), String.t()) :: Machine.execute_result()
+  def start_job(machine, unit) do
+    Machine.start_job(machine, unit)
+  end
+
+  @doc """
+  Stop a systemd unit.
+  """
+  @spec stop_job(GenServer.server(), String.t()) :: Machine.execute_result()
+  def stop_job(machine, unit) do
+    Machine.stop_job(machine, unit)
+  end
+
+  @doc """
+  Copy a file from guest to host via the shell backdoor.
+  """
+  @spec copy_from_vm(GenServer.server(), String.t(), String.t()) :: :ok | {:error, term()}
+  def copy_from_vm(machine, source, dest) do
+    Machine.copy_from_vm(machine, source, dest)
+  end
+
+  @doc """
   Get accumulated console/serial output from the VM.
   """
   @spec get_console_log(GenServer.server()) :: String.t()

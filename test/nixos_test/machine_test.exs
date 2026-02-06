@@ -1357,6 +1357,250 @@ defmodule NixosTest.MachineTest do
     end
   end
 
+  describe "get_tty_text/2" do
+    test "reads virtual terminal content via /dev/vcs" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-tty-#{:rand.uniform(100_000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        {:ok, cmd} = :gen_tcp.recv(sock, 0, 5000)
+        assert cmd =~ "/dev/vcs1"
+        tty_content = "NixOS login: \nWelcome to NixOS"
+        :ok = :gen_tcp.send(sock, Base.encode64(tty_content) <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "tty-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert {:ok, text} = Machine.get_tty_text(machine, 1)
+      assert text =~ "NixOS login"
+
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+  end
+
+  describe "wait_until_tty_matches/4" do
+    test "returns when tty content matches regex" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-ttywait-#{:rand.uniform(100_000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        # first poll: no match
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("booting...") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+
+        # second poll: match
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("login: ready") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "ttywait-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert {:ok, text} =
+               Machine.wait_until_tty_matches(machine, 1, ~r/login.*ready/, timeout: 5000)
+
+      assert text =~ "login: ready"
+
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+  end
+
+  describe "wait_for_closed_port/3" do
+    test "returns when port is closed" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-closedport-#{:rand.uniform(100_000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        # nc -z returns non-zero (port closed)
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "1\n")
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "closedport-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert :ok = Machine.wait_for_closed_port(machine, 8080, timeout: 5000)
+
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+  end
+
+  describe "wait_for_open_unix_socket/3" do
+    test "returns when socket exists" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-unixsock-#{:rand.uniform(100_000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        # test -S returns 0
+        {:ok, cmd} = :gen_tcp.recv(sock, 0, 5000)
+        assert cmd =~ "test -S"
+        :ok = :gen_tcp.send(sock, Base.encode64("") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "unixsock-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert :ok = Machine.wait_for_open_unix_socket(machine, "/run/test.sock", timeout: 5000)
+
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+  end
+
+  describe "start_job/2 and stop_job/2" do
+    test "start_job runs systemctl start" do
+      {:ok, machine} =
+        Machine.start_link(name: "startjob-test", backend: Backend.Mock)
+
+      :ok = Machine.start(machine)
+
+      # no shell, so this returns error
+      assert {:error, :not_connected} = Machine.start_job(machine, "nginx.service")
+
+      GenServer.stop(machine)
+    end
+
+    test "stop_job runs systemctl stop" do
+      {:ok, machine} =
+        Machine.start_link(name: "stopjob-test", backend: Backend.Mock)
+
+      :ok = Machine.start(machine)
+
+      assert {:error, :not_connected} = Machine.stop_job(machine, "nginx.service")
+
+      GenServer.stop(machine)
+    end
+  end
+
+  describe "copy_from_vm/3" do
+    test "reads file from guest via base64 over shell" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-copyfrom-#{:rand.uniform(100_000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      dest = Path.join(System.tmp_dir!(), "copy-dest-#{:rand.uniform(100_000)}")
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        # cat + base64 command
+        {:ok, cmd} = :gen_tcp.recv(sock, 0, 5000)
+        assert cmd =~ "base64"
+        assert cmd =~ "/etc/hostname"
+        file_content = Base.encode64("nixos-vm\n")
+        :ok = :gen_tcp.send(sock, Base.encode64(file_content) <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "copyfrom-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert :ok = Machine.copy_from_vm(machine, "/etc/hostname", dest)
+      assert File.read!(dest) == "nixos-vm\n"
+
+      GenServer.stop(machine)
+      File.rm(socket_path)
+      File.rm(dest)
+    end
+  end
+
   describe "parse_unit_info/1" do
     test "parses systemctl show output into map" do
       output = """

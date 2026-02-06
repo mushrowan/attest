@@ -233,6 +233,117 @@ defmodule NixosTest.Machine do
   end
 
   @doc """
+  Read the text content of a virtual terminal
+  """
+  @spec get_tty_text(GenServer.server(), pos_integer()) :: {:ok, String.t()} | {:error, term()}
+  def get_tty_text(machine, tty \\ 1) do
+    case execute(machine, "cat /dev/vcs#{tty}") do
+      {0, output} -> {:ok, output}
+      {code, output} when is_integer(code) -> {:error, {:exit, code, output}}
+      {:error, _} = err -> err
+    end
+  end
+
+  @doc """
+  Poll a virtual terminal until its content matches a regex
+
+  Returns the matching text on success.
+  """
+  @spec wait_until_tty_matches(GenServer.server(), pos_integer(), Regex.t(), keyword()) ::
+          {:ok, String.t()} | {:error, :timeout}
+  def wait_until_tty_matches(machine, tty, regex, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 900_000)
+    interval = Keyword.get(opts, :interval, 500)
+    deadline = System.monotonic_time(:millisecond) + timeout
+
+    poll_tty_text(machine, tty, regex, interval, deadline)
+  end
+
+  defp poll_tty_text(machine, tty, regex, interval, deadline) do
+    case get_tty_text(machine, tty) do
+      {:ok, text} ->
+        if Regex.match?(regex, text) do
+          {:ok, text}
+        else
+          retry_tty_poll(machine, tty, regex, interval, deadline)
+        end
+
+      {:error, _} ->
+        retry_tty_poll(machine, tty, regex, interval, deadline)
+    end
+  end
+
+  defp retry_tty_poll(machine, tty, regex, interval, deadline) do
+    if System.monotonic_time(:millisecond) >= deadline do
+      {:error, :timeout}
+    else
+      Process.sleep(interval)
+      poll_tty_text(machine, tty, regex, interval, deadline)
+    end
+  end
+
+  @doc """
+  Wait for a TCP port to be closed
+  """
+  @spec wait_for_closed_port(GenServer.server(), non_neg_integer(), keyword()) :: :ok
+  def wait_for_closed_port(machine, port, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 900_000)
+    wait_until_fails(machine, "nc -z localhost #{port}", timeout: timeout)
+    :ok
+  end
+
+  @doc """
+  Wait for a unix domain socket to exist
+  """
+  @spec wait_for_open_unix_socket(GenServer.server(), String.t(), keyword()) :: :ok
+  def wait_for_open_unix_socket(machine, path, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 900_000)
+    wait_until_succeeds(machine, "test -S #{path}", timeout: timeout)
+    :ok
+  end
+
+  @doc """
+  Start a systemd unit
+  """
+  @spec start_job(GenServer.server(), String.t()) :: execute_result()
+  def start_job(machine, unit) do
+    execute(machine, "systemctl start #{unit}")
+  end
+
+  @doc """
+  Stop a systemd unit
+  """
+  @spec stop_job(GenServer.server(), String.t()) :: execute_result()
+  def stop_job(machine, unit) do
+    execute(machine, "systemctl stop #{unit}")
+  end
+
+  @doc """
+  Copy a file from guest to host via the shell backdoor (base64 encoded)
+  """
+  @spec copy_from_vm(GenServer.server(), String.t(), String.t()) :: :ok | {:error, term()}
+  def copy_from_vm(machine, source, dest) do
+    case execute(machine, "base64 -w 0 #{source}") do
+      {0, encoded} ->
+        case Base.decode64(encoded) do
+          {:ok, content} ->
+            File.mkdir_p!(Path.dirname(dest))
+            File.write!(dest, content)
+            :ok
+
+          :error ->
+            {:error, :decode_failed}
+        end
+
+      {code, output} when is_integer(code) ->
+        {:error, {:exit, code, output}}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  @doc """
   Get all properties of a systemd unit as a map
   """
   @spec get_unit_info(GenServer.server(), String.t()) :: {:ok, map()} | {:error, term()}
