@@ -96,4 +96,20 @@ defmodule NixosTest do
     Machine.wait_for_open_port(machine, port, timeout)
     machine
   end
+
+  @doc """
+  Send a key combination to the VM (e.g. "ctrl-alt-delete", "ret").
+  """
+  @spec send_key(GenServer.server(), String.t()) :: :ok | {:error, term()}
+  def send_key(machine, key) do
+    Machine.send_key(machine, key)
+  end
+
+  @doc """
+  Type a string of characters on the virtual keyboard.
+  """
+  @spec send_chars(GenServer.server(), String.t(), keyword()) :: :ok | {:error, term()}
+  def send_chars(machine, chars, opts \\ []) do
+    Machine.send_chars(machine, chars, opts)
+  end
 end

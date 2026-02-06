@@ -361,6 +361,91 @@ defmodule NixosTest.MachineTest do
     end
   end
 
+  describe "send_chars/3" do
+    test "sends each character as a key" do
+      socket_path = Path.join(System.tmp_dir!(), "qmp-chars-#{:rand.uniform(10000)}.sock")
+      File.rm(socket_path)
+
+      {:ok, listen} =
+        :gen_tcp.listen(0, [
+          :binary,
+          {:packet, :line},
+          {:active, false},
+          {:ip, {:local, socket_path}}
+        ])
+
+      test_pid = self()
+
+      spawn(fn ->
+        {:ok, client} = :gen_tcp.accept(listen)
+
+        :ok =
+          :gen_tcp.send(
+            client,
+            ~s({"QMP": {"version": {"qemu": {"major": 8}}, "capabilities": []}}\n)
+          )
+
+        {:ok, _} = :gen_tcp.recv(client, 0, 5000)
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        # receive 3 send-key commands (for "hi\n" → "h", "i", "ret")
+        for _i <- 1..3 do
+          {:ok, cmd} = :gen_tcp.recv(client, 0, 5000)
+          send(test_pid, {:qmp_command, cmd})
+          :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+        end
+
+        receive do
+          :stop -> :ok
+        end
+      end)
+
+      {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+
+      {:ok, machine} =
+        Machine.start_link(name: "sendchars-test", backend: Backend.Mock, qmp: qmp)
+
+      :ok = Machine.start(machine)
+
+      assert :ok = Machine.send_chars(machine, "hi\n", delay: 0)
+
+      assert_receive {:qmp_command, cmd1}, 1000
+      assert cmd1 =~ "h"
+      assert_receive {:qmp_command, cmd2}, 1000
+      assert cmd2 =~ "i"
+      assert_receive {:qmp_command, cmd3}, 1000
+      assert cmd3 =~ "ret"
+
+      GenServer.stop(machine)
+      GenServer.stop(qmp)
+      :gen_tcp.close(listen)
+      File.rm(socket_path)
+    end
+  end
+
+  describe "char_to_key/1" do
+    test "maps lowercase letters to themselves" do
+      assert Machine.char_to_key("a") == "a"
+      assert Machine.char_to_key("z") == "z"
+    end
+
+    test "maps uppercase letters to shift+lowercase" do
+      assert Machine.char_to_key("A") == "shift-a"
+      assert Machine.char_to_key("Z") == "shift-z"
+    end
+
+    test "maps special characters" do
+      assert Machine.char_to_key("\n") == "ret"
+      assert Machine.char_to_key(" ") == "spc"
+      assert Machine.char_to_key("\t") == "tab"
+    end
+
+    test "maps digits to themselves" do
+      assert Machine.char_to_key("0") == "0"
+      assert Machine.char_to_key("9") == "9"
+    end
+  end
+
   describe "stop/1" do
     test "sends halt via backend" do
       socket_path = Path.join(System.tmp_dir!(), "qmp-stop-#{:rand.uniform(10000)}.sock")

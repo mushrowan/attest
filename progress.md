@@ -1,5 +1,22 @@
 # progress log
 
+## 2026-02-06: send_key, typespecs, credo, test fixes (done)
+
+- `Machine.send_key/2` — splits key combos ("ctrl-alt-delete") into QKeyCode
+  values for QMP `send-key` command. QEMU and Mock backends both support it
+- typespecs added to all public functions across all modules. dialyzer clean
+  (only expected IEx.start warning). fixed dialyzer warning in succeed/fail
+  by adding `is_integer` guard to disambiguate tuples
+- credo cleanup: flattened nested cases with `with`, fixed number formatting,
+  alias ordering
+- fixed flaky driver tests in nix sandbox: trap EXIT signals, use
+  Process.monitor for cleanup assertions, catch :exit in driver terminate,
+  ensure application started in test_helper
+
+69 tests passing, `nix flake check` green.
+
+---
+
 ## 2026-02-06: error handling (done)
 
 Machine GenServer no longer crashes on errors — all handle_call paths

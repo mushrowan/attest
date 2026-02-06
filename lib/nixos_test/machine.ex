@@ -174,6 +174,96 @@ defmodule NixosTest.Machine do
     GenServer.call(machine, {:send_key, key})
   end
 
+  @doc """
+  Type a string of characters on the virtual keyboard
+
+  Each character is mapped to the appropriate key combo and sent
+  individually with an optional delay between keys (default 10ms).
+  """
+  @spec send_chars(GenServer.server(), String.t(), keyword()) :: :ok | {:error, term()}
+  def send_chars(machine, chars, opts \\ []) do
+    delay = Keyword.get(opts, :delay, 10)
+
+    chars
+    |> String.graphemes()
+    |> Enum.reduce_while(:ok, fn char, :ok ->
+      send_char(machine, char, delay)
+    end)
+  end
+
+  defp send_char(machine, char, delay) do
+    case send_key(machine, char_to_key(char)) do
+      :ok ->
+        if delay > 0, do: Process.sleep(delay)
+        {:cont, :ok}
+
+      {:error, _} = err ->
+        {:halt, err}
+    end
+  end
+
+  @doc """
+  Map a single character to a QMP key name
+
+  Handles lowercase letters, digits, uppercase (shift+letter),
+  and common special characters.
+  """
+  @spec char_to_key(String.t()) :: String.t()
+  def char_to_key(char) when byte_size(char) == 1 do
+    Map.get(char_key_map(), char, char)
+  end
+
+  def char_to_key(char), do: char
+
+  @special_keys %{
+    "\n" => "ret",
+    "\t" => "tab",
+    " " => "spc",
+    "-" => "0x0C",
+    "=" => "0x0D",
+    "[" => "0x1A",
+    "]" => "0x1B",
+    ";" => "0x27",
+    "'" => "0x28",
+    "`" => "0x29",
+    "\\" => "0x2B",
+    "," => "0x33",
+    "." => "0x34",
+    "/" => "0x35",
+    # shifted variants
+    "_" => "shift-0x0C",
+    "+" => "shift-0x0D",
+    "{" => "shift-0x1A",
+    "}" => "shift-0x1B",
+    ":" => "shift-0x27",
+    "\"" => "shift-0x28",
+    "~" => "shift-0x29",
+    "|" => "shift-0x2B",
+    "<" => "shift-0x33",
+    ">" => "shift-0x34",
+    "?" => "shift-0x35",
+    "!" => "shift-0x02",
+    "@" => "shift-0x03",
+    "#" => "shift-0x04",
+    "$" => "shift-0x05",
+    "%" => "shift-0x06",
+    "^" => "shift-0x07",
+    "&" => "shift-0x08",
+    "*" => "shift-0x09",
+    "(" => "shift-0x0A",
+    ")" => "shift-0x0B"
+  }
+
+  defp char_key_map do
+    # uppercase letters → shift+lowercase
+    uppers =
+      for c <- ?A..?Z, into: %{} do
+        {<<c>>, "shift-#{<<c + 32>>}"}
+      end
+
+    Map.merge(uppers, @special_keys)
+  end
+
   # server callbacks
 
   @impl true
