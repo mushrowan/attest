@@ -1,5 +1,17 @@
 # progress log
 
+## 2026-02-06: snapshot create/restore (done)
+
+- `Backend.snapshot_create/2` and `Backend.snapshot_load/2` callbacks
+- `Backend.Firecracker` — PATCH /vm to pause, PUT /snapshot/create; PUT /snapshot/load, PATCH /vm to resume
+- `Machine.snapshot_create/2`, `Machine.snapshot_restore/2` GenServer calls
+- top-level `NixosTest.snapshot_create/2`, `NixosTest.snapshot_restore/2`
+- Backend.QEMU and Backend.Mock return `{:error, :unsupported}`
+
+122 tests passing, `nix flake check` green.
+
+---
+
 ## 2026-02-06: Backend.Firecracker (done)
 
 ### transport
