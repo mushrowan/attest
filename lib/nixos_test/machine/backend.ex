@@ -30,6 +30,10 @@ defmodule NixosTest.Machine.Backend do
               :ok | {:error, term()}
   @callback send_console(state, chars :: String.t()) :: :ok | {:error, term()}
 
+  # snapshots — return {:error, :unsupported} if not available
+  @callback snapshot_create(state, snapshot_dir :: String.t()) :: :ok | {:error, term()}
+  @callback snapshot_load(state, snapshot_dir :: String.t()) :: :ok | {:error, term()}
+
   # port messages (called by Machine's handle_info)
   @callback handle_port_exit(state, exit_code :: non_neg_integer()) :: state
 

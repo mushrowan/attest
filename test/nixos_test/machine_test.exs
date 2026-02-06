@@ -1722,6 +1722,30 @@ defmodule NixosTest.MachineTest do
     end
   end
 
+  describe "snapshot_create/2" do
+    test "delegates to backend snapshot_create" do
+      {:ok, machine} =
+        Machine.start_link(name: "snap-create-test", backend: Backend.Mock)
+
+      :ok = Machine.start(machine)
+      assert {:error, :unsupported} = Machine.snapshot_create(machine, "/tmp/snap")
+
+      GenServer.stop(machine)
+    end
+  end
+
+  describe "snapshot_restore/2" do
+    test "delegates to backend snapshot_load" do
+      {:ok, machine} =
+        Machine.start_link(name: "snap-restore-test", backend: Backend.Mock)
+
+      :ok = Machine.start(machine)
+      assert {:error, :unsupported} = Machine.snapshot_restore(machine, "/tmp/snap")
+
+      GenServer.stop(machine)
+    end
+  end
+
   describe "copy_from_host_via_shell/3" do
     test "transfers file content via base64" do
       socket_path =

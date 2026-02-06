@@ -528,6 +528,26 @@ defmodule NixosTest.Machine do
   end
 
   @doc """
+  Create a VM snapshot (firecracker only)
+
+  Pauses the VM and writes snapshot + memory state to `snapshot_dir`.
+  """
+  @spec snapshot_create(GenServer.server(), String.t()) :: :ok | {:error, term()}
+  def snapshot_create(machine, snapshot_dir) do
+    GenServer.call(machine, {:snapshot_create, snapshot_dir}, :infinity)
+  end
+
+  @doc """
+  Restore a VM from a snapshot (firecracker only)
+
+  Loads snapshot + memory state from `snapshot_dir` and resumes.
+  """
+  @spec snapshot_restore(GenServer.server(), String.t()) :: :ok | {:error, term()}
+  def snapshot_restore(machine, snapshot_dir) do
+    GenServer.call(machine, {:snapshot_restore, snapshot_dir}, :infinity)
+  end
+
+  @doc """
   Take a screenshot
   """
   @spec screenshot(GenServer.server(), String.t()) :: :ok | {:error, term()}
@@ -806,6 +826,20 @@ defmodule NixosTest.Machine do
     else
       {:error, _} = err -> {:reply, err, state}
     end
+  end
+
+  @impl true
+  def handle_call({:snapshot_create, snapshot_dir}, _from, state) do
+    Logger.info("creating snapshot for #{state.name} in #{snapshot_dir}")
+    result = state.backend_mod.snapshot_create(state.backend_state, snapshot_dir)
+    {:reply, result, state}
+  end
+
+  @impl true
+  def handle_call({:snapshot_restore, snapshot_dir}, _from, state) do
+    Logger.info("restoring snapshot for #{state.name} from #{snapshot_dir}")
+    result = state.backend_mod.snapshot_load(state.backend_state, snapshot_dir)
+    {:reply, result, state}
   end
 
   @impl true

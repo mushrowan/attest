@@ -227,6 +227,41 @@ defmodule NixosTest.Machine.Backend.Firecracker do
   @impl true
   def send_console(_state, _chars), do: {:error, :unsupported}
 
+  # snapshots
+
+  @impl true
+  def snapshot_create(state, snapshot_dir) do
+    api = state.api_socket_path
+    File.mkdir_p!(snapshot_dir)
+    snapshot_path = Path.join(snapshot_dir, "snapshot_file")
+    mem_path = Path.join(snapshot_dir, "mem_file")
+
+    with :ok <- API.patch(api, "/vm", %{"state" => "Paused"}),
+         :ok <-
+           API.put(api, "/snapshot/create", %{
+             "snapshot_path" => snapshot_path,
+             "mem_file_path" => mem_path
+           }) do
+      :ok
+    end
+  end
+
+  @impl true
+  def snapshot_load(state, snapshot_dir) do
+    api = state.api_socket_path
+    snapshot_path = Path.join(snapshot_dir, "snapshot_file")
+    mem_path = Path.join(snapshot_dir, "mem_file")
+
+    with :ok <-
+           API.put(api, "/snapshot/load", %{
+             "snapshot_path" => snapshot_path,
+             "mem_file_path" => mem_path
+           }),
+         :ok <- API.patch(api, "/vm", %{"state" => "Resumed"}) do
+      :ok
+    end
+  end
+
   # network control via host-side ip link commands
 
   @impl true

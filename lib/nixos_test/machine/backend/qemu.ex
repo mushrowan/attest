@@ -210,6 +210,12 @@ defmodule NixosTest.Machine.Backend.QEMU do
   end
 
   @impl true
+  def snapshot_create(_state, _snapshot_dir), do: {:error, :unsupported}
+
+  @impl true
+  def snapshot_load(_state, _snapshot_dir), do: {:error, :unsupported}
+
+  @impl true
   def handle_port_exit(state, _code) do
     %{state | port_exited: true, qemu_port: nil}
   end
