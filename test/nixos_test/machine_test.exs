@@ -214,16 +214,14 @@ defmodule NixosTest.MachineTest do
       File.rm(socket_path)
     end
 
-    test "crashes when not connected" do
-      Process.flag(:trap_exit, true)
-
+    test "returns error when not connected" do
       {:ok, machine} =
         Machine.start_link(name: "not-connected-test", backend: Backend.Mock)
 
-      catch_exit(Machine.execute(machine, "echo hello"))
-
-      assert_receive {:EXIT, ^machine, {%RuntimeError{message: msg}, _}}, 1000
-      assert msg =~ "not connected"
+      assert {:error, :not_connected} = Machine.execute(machine, "echo hello")
+      # machine should still be alive
+      assert Process.alive?(machine)
+      GenServer.stop(machine)
     end
   end
 
@@ -279,6 +277,17 @@ defmodule NixosTest.MachineTest do
       GenServer.stop(qmp)
       :gen_tcp.close(listen)
       File.rm(socket_path)
+    end
+
+    test "returns error tuple when backend has no screenshot support" do
+      {:ok, machine} =
+        Machine.start_link(name: "screenshot-err-test", backend: Backend.Mock)
+
+      :ok = Machine.start(machine)
+
+      assert {:error, :unsupported} = Machine.screenshot(machine, "/tmp/test.ppm")
+      assert Process.alive?(machine)
+      GenServer.stop(machine)
     end
   end
 
@@ -380,7 +389,7 @@ defmodule NixosTest.MachineTest do
       File.rm(socket_path)
     end
 
-    test "raises on failed unit" do
+    test "returns error on failed unit" do
       socket_path = Path.join(System.tmp_dir!(), "shell-fail-#{:rand.uniform(10000)}.sock")
       {:ok, shell} = Shell.start_link(socket_path: socket_path)
 
@@ -405,12 +414,54 @@ defmodule NixosTest.MachineTest do
 
       :ok = Machine.start(machine)
 
-      Process.flag(:trap_exit, true)
-      catch_exit(Machine.wait_for_unit(machine, "bad.service", 5000))
+      assert {:error, {:unit_failed, "bad.service"}} =
+               Machine.wait_for_unit(machine, "bad.service", 5000)
 
-      assert_receive {:EXIT, ^machine, {%RuntimeError{message: msg}, _}}, 1000
-      assert msg =~ "failed"
+      # machine should still be alive
+      assert Process.alive?(machine)
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
 
+    test "returns error when unit stays activating past retries" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-unit-timeout-#{:rand.uniform(10000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        # always return activating for 3 retries
+        for _i <- 1..3 do
+          {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+          :ok = :gen_tcp.send(sock, Base.encode64("ActiveState=activating\n") <> "\n")
+          {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+          :ok = :gen_tcp.send(sock, "0\n")
+        end
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "wait-unit-timeout-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert {:error, {:unit_timeout, "slow.service", "activating"}} =
+               Machine.wait_for_unit(machine, "slow.service", 2000)
+
+      assert Process.alive?(machine)
+      GenServer.stop(machine)
       File.rm(socket_path)
     end
   end
@@ -455,6 +506,46 @@ defmodule NixosTest.MachineTest do
       assert :ok = Machine.wait_for_open_port(machine, 80, 5000)
 
       assert_receive :mock_done, 1000
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+
+    test "returns error when port never opens" do
+      socket_path = Path.join(System.tmp_dir!(), "shell-port-fail-#{:rand.uniform(10000)}.sock")
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        # always return non-zero (port closed) for 3 retries
+        for _i <- 1..3 do
+          {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+          :ok = :gen_tcp.send(sock, Base.encode64("") <> "\n")
+          {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+          :ok = :gen_tcp.send(sock, "1\n")
+        end
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "wait-port-fail-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert {:error, {:port_not_open, 80}} =
+               Machine.wait_for_open_port(machine, 80, 2000)
+
+      assert Process.alive?(machine)
       GenServer.stop(machine)
       File.rm(socket_path)
     end

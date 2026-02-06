@@ -110,6 +110,9 @@ defmodule NixosTest.Machine do
 
       {code, output} ->
         raise "command failed with exit code #{code}: #{output}"
+
+      {:error, reason} ->
+        raise "command failed: #{inspect(reason)}"
     end
   end
 
@@ -124,6 +127,9 @@ defmodule NixosTest.Machine do
 
       {_code, output} ->
         output
+
+      {:error, reason} ->
+        raise "command failed: #{inspect(reason)}"
     end
   end
 
@@ -131,14 +137,14 @@ defmodule NixosTest.Machine do
   Wait for a systemd unit to become active
   """
   def wait_for_unit(machine, unit, timeout \\ 900_000) do
-    GenServer.call(machine, {:wait_for_unit, unit}, timeout)
+    GenServer.call(machine, {:wait_for_unit, unit, timeout}, timeout + 5000)
   end
 
   @doc """
   Wait for a port to be open
   """
   def wait_for_open_port(machine, port, timeout \\ 900_000) do
-    GenServer.call(machine, {:wait_for_open_port, port}, timeout)
+    GenServer.call(machine, {:wait_for_open_port, port, timeout}, timeout + 5000)
   end
 
   @doc """
@@ -226,37 +232,39 @@ defmodule NixosTest.Machine do
   @impl true
   def handle_call({:execute, _command}, _from, %{shell: nil} = state) do
     Logger.debug("executing on #{state.name}: not connected")
-    raise "cannot execute: machine #{state.name} not connected"
+    {:reply, {:error, :not_connected}, state}
   end
 
   def handle_call({:execute, command}, _from, %{shell: shell} = state) do
     Logger.debug("executing on #{state.name}: #{command}")
-    {:ok, output, exit_code} = Shell.execute(shell, command)
-    {:reply, {exit_code, output}, state}
+
+    case Shell.execute(shell, command) do
+      {:ok, output, exit_code} -> {:reply, {exit_code, output}, state}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
   end
 
   @impl true
-  def handle_call({:wait_for_unit, unit}, _from, %{shell: shell} = state) do
+  def handle_call({:wait_for_unit, unit, timeout}, _from, %{shell: shell} = state) do
     Logger.info("waiting for unit #{unit} on #{state.name}")
-    result = poll_unit_state(shell, unit)
+    retries = max(div(timeout, 1000), 1)
+    result = poll_unit_state(shell, unit, retries)
     {:reply, result, state}
   end
 
   @impl true
-  def handle_call({:wait_for_open_port, port}, _from, %{shell: shell} = state) do
+  def handle_call({:wait_for_open_port, port, timeout}, _from, %{shell: shell} = state) do
     Logger.info("waiting for port #{port} on #{state.name}")
-    result = poll_port_open(shell, port)
+    retries = max(div(timeout, 1000), 1)
+    result = poll_port_open(shell, port, retries)
     {:reply, result, state}
   end
 
   @impl true
   def handle_call({:screenshot, filename}, _from, state) do
     Logger.info("taking screenshot: #{filename}")
-
-    case state.backend_mod.screenshot(state.backend_state, filename) do
-      :ok -> {:reply, :ok, state}
-      {:error, reason} -> raise "screenshot failed: #{inspect(reason)}"
-    end
+    result = state.backend_mod.screenshot(state.backend_state, filename)
+    {:reply, result, state}
   end
 
   # port stdout/stderr data from QEMU backend (port owner is Machine process)
@@ -283,23 +291,28 @@ defmodule NixosTest.Machine do
 
   # private helpers
 
-  defp poll_unit_state(shell, unit, retries \\ 60) do
+  defp poll_unit_state(shell, unit, retries) do
     cmd = "systemctl show #{unit} --property=ActiveState"
-    {:ok, output, _exit_code} = Shell.execute(shell, cmd)
 
-    case parse_unit_state(output) do
-      "active" ->
-        :ok
+    case Shell.execute(shell, cmd) do
+      {:ok, output, _exit_code} ->
+        case parse_unit_state(output) do
+          "active" ->
+            :ok
 
-      "failed" ->
-        raise "unit #{unit} reached state failed"
+          "failed" ->
+            {:error, {:unit_failed, unit}}
 
-      _other when retries > 0 ->
-        Process.sleep(1000)
-        poll_unit_state(shell, unit, retries - 1)
+          _other when retries > 0 ->
+            Process.sleep(1000)
+            poll_unit_state(shell, unit, retries - 1)
 
-      other ->
-        raise "unit #{unit} did not become active (last state: #{other})"
+          other ->
+            {:error, {:unit_timeout, unit, other}}
+        end
+
+      {:error, reason} ->
+        {:error, {:shell_error, reason}}
     end
   end
 
@@ -310,20 +323,22 @@ defmodule NixosTest.Machine do
     end
   end
 
-  defp poll_port_open(shell, port, retries \\ 60) do
+  defp poll_port_open(shell, port, retries) do
     cmd = "nc -z localhost #{port}"
-    {:ok, _output, exit_code} = Shell.execute(shell, cmd)
 
-    case exit_code do
-      0 ->
+    case Shell.execute(shell, cmd) do
+      {:ok, _output, 0} ->
         :ok
 
-      _other when retries > 0 ->
+      {:ok, _output, _nonzero} when retries > 0 ->
         Process.sleep(1000)
         poll_port_open(shell, port, retries - 1)
 
-      _other ->
-        raise "port #{port} did not open"
+      {:ok, _output, _nonzero} ->
+        {:error, {:port_not_open, port}}
+
+      {:error, reason} ->
+        {:error, {:shell_error, reason}}
     end
   end
 end

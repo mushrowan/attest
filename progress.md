@@ -1,5 +1,17 @@
 # progress log
 
+## 2026-02-06: credo cleanup (done)
+
+fixed 4 of 5 credo --strict issues (5th is a legit TODO placeholder):
+- number formatting: `3600_000` → `3_600_000` in driver.ex
+- alias ordering in machine_test.exs
+- nested-too-deep in `do_execute` — flattened with `with`
+- nested-too-deep in `VirtConsole.connect` — extracted `accept_or_close`/`wait_or_close` helpers
+
+64 tests passing, `nix flake check` green, only remaining credo issue is the TODO tag.
+
+---
+
 ## 2026-02-06: hypervisor abstraction complete (done)
 
 all 4 phases from PLAN.md implemented:
