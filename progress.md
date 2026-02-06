@@ -1,5 +1,14 @@
 # progress log
 
+## 2026-02-06: phase 1 bugfixes (done)
+
+- added missing `handle_call(:booted?, ...)` — 4 tests were failing with FunctionClauseError
+- removed unused `connect_shell/3` and `flush_port_messages/1`
+- 43/43 tests passing, `nix flake check` green
+- next: phase 2 — Backend behaviour + Mock + QEMU extraction
+
+---
+
 ## 2026-02-06: hypervisor abstraction plan
 
 ### context
