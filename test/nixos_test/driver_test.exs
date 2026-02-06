@@ -2,6 +2,7 @@ defmodule NixosTest.DriverTest do
   use ExUnit.Case
 
   alias NixosTest.Driver
+  alias NixosTest.Machine.Backend
 
   describe "Driver" do
     test "can start a driver process" do
@@ -23,7 +24,8 @@ defmodule NixosTest.DriverTest do
     end
 
     test "creates machines from config" do
-      {:ok, driver} = Driver.start_link(machines: [%{name: "client"}])
+      {:ok, driver} =
+        Driver.start_link(machines: [%{name: "client", backend: Backend.Mock}])
 
       assert {:ok, machine_pid} = Driver.get_machine(driver, "client")
       assert Process.alive?(machine_pid)
@@ -32,15 +34,19 @@ defmodule NixosTest.DriverTest do
     end
 
     test "start_all boots all machines" do
-      {:ok, driver} = Driver.start_link(machines: [%{name: "m1"}, %{name: "m2"}])
+      {:ok, driver} =
+        Driver.start_link(
+          machines: [
+            %{name: "m1", backend: Backend.Mock},
+            %{name: "m2", backend: Backend.Mock}
+          ]
+        )
 
-      # machines start not booted
       {:ok, m1} = Driver.get_machine(driver, "m1")
       {:ok, m2} = Driver.get_machine(driver, "m2")
       refute NixosTest.Machine.booted?(m1)
       refute NixosTest.Machine.booted?(m2)
 
-      # start_all boots them
       :ok = Driver.start_all(driver)
 
       assert NixosTest.Machine.booted?(m1)
@@ -50,7 +56,13 @@ defmodule NixosTest.DriverTest do
     end
 
     test "machines are stopped when driver terminates" do
-      {:ok, driver} = Driver.start_link(machines: [%{name: "cleanup1"}, %{name: "cleanup2"}])
+      {:ok, driver} =
+        Driver.start_link(
+          machines: [
+            %{name: "cleanup1", backend: Backend.Mock},
+            %{name: "cleanup2", backend: Backend.Mock}
+          ]
+        )
 
       {:ok, m1} = Driver.get_machine(driver, "cleanup1")
       {:ok, m2} = Driver.get_machine(driver, "cleanup2")
@@ -58,10 +70,8 @@ defmodule NixosTest.DriverTest do
       assert Process.alive?(m1)
       assert Process.alive?(m2)
 
-      # stop driver
       GenServer.stop(driver)
 
-      # machines should be stopped
       refute Process.alive?(m1)
       refute Process.alive?(m2)
     end
