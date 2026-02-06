@@ -232,6 +232,89 @@ defmodule NixosTest.Machine do
   end
 
   @doc """
+  Get all properties of a systemd unit as a map
+  """
+  @spec get_unit_info(GenServer.server(), String.t()) :: {:ok, map()} | {:error, term()}
+  def get_unit_info(machine, unit) do
+    case execute(machine, "systemctl --no-pager show #{unit}") do
+      {0, output} -> {:ok, parse_unit_info(output)}
+      {code, output} when is_integer(code) -> {:error, {:exit, code, output}}
+      {:error, _} = err -> err
+    end
+  end
+
+  @doc """
+  Get a single systemd unit property
+  """
+  @spec get_unit_property(GenServer.server(), String.t(), String.t()) ::
+          {:ok, String.t()} | {:error, term()}
+  def get_unit_property(machine, unit, property) do
+    case execute(machine, "systemctl --no-pager show #{unit} --property=#{property}") do
+      {0, output} ->
+        info = parse_unit_info(output)
+
+        case Map.fetch(info, property) do
+          {:ok, value} -> {:ok, value}
+          :error -> {:error, {:property_not_found, property}}
+        end
+
+      {code, output} when is_integer(code) ->
+        {:error, {:exit, code, output}}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  @doc """
+  Assert a unit is in the expected state, returns :ok or {:error, reason}
+  """
+  @spec require_unit_state(GenServer.server(), String.t(), String.t()) ::
+          :ok | {:error, term()}
+  def require_unit_state(machine, unit, expected_state \\ "active") do
+    case get_unit_property(machine, unit, "ActiveState") do
+      {:ok, ^expected_state} -> :ok
+      {:ok, actual} -> {:error, {:unexpected_state, unit, expected_state, actual}}
+      {:error, _} = err -> err
+    end
+  end
+
+  @doc """
+  Copy a file from host to guest via the shell backdoor (base64 encoded)
+  """
+  @spec copy_from_host_via_shell(GenServer.server(), String.t(), String.t()) ::
+          :ok | {:error, term()}
+  def copy_from_host_via_shell(machine, source, target) do
+    content = File.read!(source)
+    encoded = Base.encode64(content)
+
+    succeed(machine, "mkdir -p $(dirname #{target})")
+    succeed(machine, "echo -n #{encoded} | base64 -d > #{target}")
+    :ok
+  end
+
+  @doc """
+  Parse systemctl show output into a key-value map
+  """
+  @spec parse_unit_info(String.t()) :: map()
+  def parse_unit_info(output) do
+    output
+    |> String.split("\n")
+    |> Enum.reduce(%{}, &parse_unit_line/2)
+  end
+
+  defp parse_unit_line(line, acc) do
+    case String.split(line, "=", parts: 2) do
+      [key, value] ->
+        key = String.trim(key)
+        if key != "", do: Map.put(acc, key, String.trim(value)), else: acc
+
+      _ ->
+        acc
+    end
+  end
+
+  @doc """
   Wait for a systemd unit to become active
   """
   @spec wait_for_unit(GenServer.server(), String.t(), timeout()) :: :ok | {:error, term()}

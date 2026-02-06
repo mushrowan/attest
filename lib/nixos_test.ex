@@ -138,6 +138,41 @@ defmodule NixosTest do
   end
 
   @doc """
+  Get all properties of a systemd unit as a map.
+  """
+  @spec get_unit_info(GenServer.server(), String.t()) :: {:ok, map()} | {:error, term()}
+  def get_unit_info(machine, unit) do
+    Machine.get_unit_info(machine, unit)
+  end
+
+  @doc """
+  Get a single systemd unit property.
+  """
+  @spec get_unit_property(GenServer.server(), String.t(), String.t()) ::
+          {:ok, String.t()} | {:error, term()}
+  def get_unit_property(machine, unit, property) do
+    Machine.get_unit_property(machine, unit, property)
+  end
+
+  @doc """
+  Assert a unit is in the expected state.
+  """
+  @spec require_unit_state(GenServer.server(), String.t(), String.t()) ::
+          :ok | {:error, term()}
+  def require_unit_state(machine, unit, expected_state \\ "active") do
+    Machine.require_unit_state(machine, unit, expected_state)
+  end
+
+  @doc """
+  Copy a file from host to guest via base64 shell transfer.
+  """
+  @spec copy_from_host_via_shell(GenServer.server(), String.t(), String.t()) ::
+          :ok | {:error, term()}
+  def copy_from_host_via_shell(machine, source, target) do
+    Machine.copy_from_host_via_shell(machine, source, target)
+  end
+
+  @doc """
   Send a key combination to the VM (e.g. "ctrl-alt-delete", "ret").
   """
   @spec send_key(GenServer.server(), String.t()) :: :ok | {:error, term()}

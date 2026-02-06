@@ -949,4 +949,170 @@ defmodule NixosTest.MachineTest do
       File.rm(socket_path)
     end
   end
+
+  describe "parse_unit_info/1" do
+    test "parses systemctl show output into map" do
+      output = """
+      Type=simple
+      ActiveState=active
+      SubState=running
+      Description=My Service
+      MainPID=1234
+      """
+
+      info = Machine.parse_unit_info(output)
+      assert info["Type"] == "simple"
+      assert info["ActiveState"] == "active"
+      assert info["SubState"] == "running"
+      assert info["MainPID"] == "1234"
+    end
+
+    test "handles empty output" do
+      assert Machine.parse_unit_info("") == %{}
+    end
+
+    test "handles values with equals signs" do
+      output = "Environment=FOO=bar BAZ=qux\n"
+      info = Machine.parse_unit_info(output)
+      assert info["Environment"] == "FOO=bar BAZ=qux"
+    end
+  end
+
+  describe "get_unit_info/2" do
+    test "executes systemctl show and parses result" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-unitinfo-#{:rand.uniform(10000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        output = "Type=simple\nActiveState=active\nSubState=running\n"
+        :ok = :gen_tcp.send(sock, Base.encode64(output) <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "unitinfo-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert {:ok, info} = Machine.get_unit_info(machine, "nginx.service")
+      assert info["ActiveState"] == "active"
+      assert info["Type"] == "simple"
+
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+  end
+
+  describe "get_unit_property/3" do
+    test "returns a single property value" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-unitprop-#{:rand.uniform(10000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("ActiveState=active\n") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "unitprop-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert {:ok, "active"} = Machine.get_unit_property(machine, "nginx.service", "ActiveState")
+
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+  end
+
+  describe "copy_from_host_via_shell/3" do
+    test "transfers file content via base64" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-copy-#{:rand.uniform(10000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+      test_pid = self()
+
+      # create a temp source file
+      source = Path.join(System.tmp_dir!(), "copy-src-#{:rand.uniform(10000)}")
+      File.write!(source, "hello from host")
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+
+        # mkdir -p command
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+
+        # base64 decode + write command
+        {:ok, cmd} = :gen_tcp.recv(sock, 0, 5000)
+        send(test_pid, {:write_command, cmd})
+        :ok = :gen_tcp.send(sock, Base.encode64("") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "copy-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert :ok = Machine.copy_from_host_via_shell(machine, source, "/tmp/dest")
+
+      assert_receive {:write_command, cmd}, 1000
+      # the command should contain the base64-encoded content
+      assert cmd =~ Base.encode64("hello from host")
+
+      GenServer.stop(machine)
+      File.rm(socket_path)
+      File.rm(source)
+    end
+  end
 end

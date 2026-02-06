@@ -1,19 +1,27 @@
 # progress log
 
-## 2026-02-06: send_key, typespecs, credo, test fixes (done)
+## 2026-02-06: feature parity push (done)
 
-- `Machine.send_key/2` — splits key combos ("ctrl-alt-delete") into QKeyCode
-  values for QMP `send-key` command. QEMU and Mock backends both support it
-- typespecs added to all public functions across all modules. dialyzer clean
-  (only expected IEx.start warning). fixed dialyzer warning in succeed/fail
-  by adding `is_integer` guard to disambiguate tuples
-- credo cleanup: flattened nested cases with `with`, fixed number formatting,
-  alias ordering
-- fixed flaky driver tests in nix sandbox: trap EXIT signals, use
-  Process.monitor for cleanup assertions, catch :exit in driver terminate,
-  ensure application started in test_helper
+### keyboard input
+- `Machine.send_key/2` — QMP `send-key` with QKeyCode values
+- `Machine.send_chars/3` — type strings character-by-character with char_to_key mapping
+- `Machine.char_to_key/1` — maps chars to QMP key names (uppercase→shift+letter,
+  special chars→scancodes, whitespace→named keys)
 
-69 tests passing, `nix flake check` green.
+### retry helpers
+- `wait_until_succeeds/3` — deadline-based retry until exit 0
+- `wait_until_fails/3` — retry until non-zero exit
+- `wait_for_file/3` — wraps wait_until_succeeds with `test -e`
+- `systemctl/2` — convenience wrapper for systemctl commands
+- `crash/1` — force-quit via halt with short timeout
+
+### quality
+- typespecs on all public functions, dialyzer clean
+- credo cleanup (nesting, number format, alias order)
+- fixed flaky driver tests in nix sandbox (trap exits, process monitors)
+
+all functions also in top-level NixosTest API.
+76 tests passing, `nix flake check` green.
 
 ---
 
