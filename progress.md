@@ -1,5 +1,25 @@
 # progress log
 
+## 2026-02-06: block/unblock, forward_port, reboot (done)
+
+### network control
+- `block/1` — QMP `set_link` to disable inter-VM network (virtio-net-pci.1)
+- `unblock/1` — QMP `set_link` to re-enable inter-VM network
+- new Backend callbacks: `block/1`, `unblock/1`
+
+### port forwarding
+- `forward_port/3` — QMP `human-monitor-command` for SLIRP `hostfwd_add`
+- new Backend callback: `forward_port/3`
+
+### reboot
+- `reboot/1` — sends ctrl-alt-delete via QMP, marks machine disconnected
+- shell reconnection deferred (needs transport layer changes)
+
+all functions in Machine + NixosTest top-level API.
+92 tests passing, `nix flake check` green.
+
+---
+
 ## 2026-02-06: console log capture (done)
 
 - `get_console_log/1` — returns accumulated serial/console output from VM
