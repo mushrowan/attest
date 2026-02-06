@@ -29,6 +29,8 @@ defmodule NixosTest.Machine do
 
   # client API
 
+  @type execute_result :: {non_neg_integer(), String.t()} | {:error, term()}
+
   @doc """
   Start a Machine process
 
@@ -38,6 +40,7 @@ defmodule NixosTest.Machine do
   - `:backend` — backend module (default: `Backend.QEMU`)
   - all other opts are passed to the backend's `init/1` as a map
   """
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     name = Keyword.fetch!(opts, :name)
 
@@ -49,6 +52,7 @@ defmodule NixosTest.Machine do
   @doc """
   Start the VM
   """
+  @spec start(GenServer.server()) :: :ok
   def start(machine) do
     GenServer.call(machine, :start, :infinity)
   end
@@ -64,6 +68,7 @@ defmodule NixosTest.Machine do
   @doc """
   Stop the VM via QMP quit command (legacy, use halt/2 or shutdown/2)
   """
+  @spec stop(GenServer.server()) :: :ok
   def stop(machine) do
     GenServer.call(machine, :stop, 30_000)
   end
@@ -95,6 +100,7 @@ defmodule NixosTest.Machine do
   @doc """
   Execute a command in the VM and return {exit_code, output}
   """
+  @spec execute(GenServer.server(), String.t(), timeout()) :: execute_result()
   def execute(machine, command, timeout \\ 900_000) do
     GenServer.call(machine, {:execute, command}, timeout)
   end
@@ -103,12 +109,13 @@ defmodule NixosTest.Machine do
   Execute a command and expect success (exit code 0).
   Raises on non-zero exit.
   """
+  @spec succeed(GenServer.server(), String.t()) :: String.t()
   def succeed(machine, command) do
     case execute(machine, command) do
       {0, output} ->
         output
 
-      {code, output} ->
+      {code, output} when is_integer(code) ->
         raise "command failed with exit code #{code}: #{output}"
 
       {:error, reason} ->
@@ -120,12 +127,13 @@ defmodule NixosTest.Machine do
   Execute a command and expect failure (non-zero exit code).
   Raises on zero exit.
   """
+  @spec fail(GenServer.server(), String.t()) :: String.t()
   def fail(machine, command) do
     case execute(machine, command) do
       {0, output} ->
         raise "command unexpectedly succeeded: #{output}"
 
-      {_code, output} ->
+      {code, output} when is_integer(code) ->
         output
 
       {:error, reason} ->
@@ -136,6 +144,7 @@ defmodule NixosTest.Machine do
   @doc """
   Wait for a systemd unit to become active
   """
+  @spec wait_for_unit(GenServer.server(), String.t(), timeout()) :: :ok | {:error, term()}
   def wait_for_unit(machine, unit, timeout \\ 900_000) do
     GenServer.call(machine, {:wait_for_unit, unit, timeout}, timeout + 5000)
   end
@@ -143,6 +152,8 @@ defmodule NixosTest.Machine do
   @doc """
   Wait for a port to be open
   """
+  @spec wait_for_open_port(GenServer.server(), non_neg_integer(), timeout()) ::
+          :ok | {:error, term()}
   def wait_for_open_port(machine, port, timeout \\ 900_000) do
     GenServer.call(machine, {:wait_for_open_port, port, timeout}, timeout + 5000)
   end
@@ -150,6 +161,7 @@ defmodule NixosTest.Machine do
   @doc """
   Take a screenshot
   """
+  @spec screenshot(GenServer.server(), String.t()) :: :ok | {:error, term()}
   def screenshot(machine, filename) do
     GenServer.call(machine, {:screenshot, filename})
   end

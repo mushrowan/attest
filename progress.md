@@ -1,5 +1,25 @@
 # progress log
 
+## 2026-02-06: error handling (done)
+
+Machine GenServer no longer crashes on errors — all handle_call paths
+return `{:error, reason}` tuples instead of raising:
+- `execute` on disconnected → `{:error, :not_connected}`
+- `execute` shell errors → `{:error, reason}`
+- `screenshot` errors → pass through from backend
+- `wait_for_unit` failed → `{:error, {:unit_failed, unit}}`
+- `wait_for_unit` timeout → `{:error, {:unit_timeout, unit, last_state}}`
+- `wait_for_open_port` → `{:error, {:port_not_open, port}}`
+- shell errors during polling → `{:error, {:shell_error, reason}}`
+
+poll retry count now derived from timeout param (1 retry per second)
+instead of hardcoded 60. `succeed/1` and `fail/1` still raise (intentional
+— they're the "crash on error" convenience wrappers).
+
+67 tests passing, `nix flake check` green.
+
+---
+
 ## 2026-02-06: credo cleanup (done)
 
 fixed 4 of 5 credo --strict issues (5th is a legit TODO placeholder):

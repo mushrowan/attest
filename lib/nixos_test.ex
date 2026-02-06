@@ -30,6 +30,7 @@ defmodule NixosTest do
   @doc """
   Start all machines in the test.
   """
+  @spec start_all(GenServer.server()) :: GenServer.server()
   def start_all(driver) do
     Driver.start_all(driver)
     driver
@@ -38,6 +39,7 @@ defmodule NixosTest do
   @doc """
   Get a machine by name.
   """
+  @spec machine(GenServer.server(), String.t()) :: {:ok, pid()} | {:error, :not_found}
   def machine(driver, name) do
     Driver.get_machine(driver, name)
   end
@@ -45,6 +47,7 @@ defmodule NixosTest do
   @doc """
   Wait for a systemd unit to become active.
   """
+  @spec wait_for_unit(GenServer.server(), String.t(), keyword()) :: GenServer.server()
   def wait_for_unit(machine, unit, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, 900_000)
     Machine.wait_for_unit(machine, unit, timeout)
@@ -54,6 +57,7 @@ defmodule NixosTest do
   @doc """
   Execute a command and expect it to succeed (exit code 0).
   """
+  @spec succeed(GenServer.server(), String.t()) :: String.t()
   def succeed(machine, command) do
     Machine.succeed(machine, command)
   end
@@ -61,6 +65,7 @@ defmodule NixosTest do
   @doc """
   Execute a command and expect it to fail (non-zero exit code).
   """
+  @spec fail(GenServer.server(), String.t()) :: String.t()
   def fail(machine, command) do
     Machine.fail(machine, command)
   end
@@ -68,6 +73,7 @@ defmodule NixosTest do
   @doc """
   Execute a command and return {exit_code, output}.
   """
+  @spec execute(GenServer.server(), String.t()) :: NixosTest.Machine.execute_result()
   def execute(machine, command) do
     Machine.execute(machine, command)
   end
@@ -75,6 +81,7 @@ defmodule NixosTest do
   @doc """
   Take a screenshot of the VM display.
   """
+  @spec screenshot(GenServer.server(), String.t()) :: :ok | {:error, term()}
   def screenshot(machine, filename) do
     Machine.screenshot(machine, filename)
   end
@@ -82,6 +89,8 @@ defmodule NixosTest do
   @doc """
   Wait for a port to be open.
   """
+  @spec wait_for_open_port(GenServer.server(), non_neg_integer(), keyword()) ::
+          GenServer.server()
   def wait_for_open_port(machine, port, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, 900_000)
     Machine.wait_for_open_port(machine, port, timeout)

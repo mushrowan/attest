@@ -3,6 +3,7 @@ defmodule NixosTest.CLI do
   Command-line interface for nixos-test.
   """
 
+  @spec main([String.t()]) :: :ok
   def main(args) do
     args
     |> parse_args()

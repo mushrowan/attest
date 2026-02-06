@@ -24,6 +24,7 @@ defmodule NixosTest.Driver do
 
   # client API
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
   end
@@ -31,6 +32,7 @@ defmodule NixosTest.Driver do
   @doc """
   Start all machines in parallel.
   """
+  @spec start_all(GenServer.server()) :: :ok
   def start_all(driver) do
     GenServer.call(driver, :start_all, :infinity)
   end
@@ -38,6 +40,7 @@ defmodule NixosTest.Driver do
   @doc """
   Get a machine by name.
   """
+  @spec get_machine(GenServer.server(), String.t()) :: {:ok, pid()} | {:error, :not_found}
   def get_machine(driver, name) do
     GenServer.call(driver, {:get_machine, name})
   end
@@ -45,6 +48,7 @@ defmodule NixosTest.Driver do
   @doc """
   Run the test script.
   """
+  @spec run_tests(GenServer.server()) :: :ok
   def run_tests(driver) do
     GenServer.call(driver, :run_tests, :infinity)
   end

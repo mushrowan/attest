@@ -84,6 +84,7 @@ defmodule NixosTest.Machine.QMP do
   @doc """
   Start a QMP client connected to the given socket path.
   """
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     socket_path = Keyword.fetch!(opts, :socket_path)
     GenServer.start_link(__MODULE__, socket_path, Keyword.take(opts, [:name]))

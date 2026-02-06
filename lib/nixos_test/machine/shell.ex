@@ -31,6 +31,7 @@ defmodule NixosTest.Machine.Shell do
   - `:socket_path` (required) — unix socket path
   - `:transport` — transport module (default: VirtConsole)
   """
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     socket_path = Keyword.fetch!(opts, :socket_path)
     transport = Keyword.get(opts, :transport, VirtConsole)
