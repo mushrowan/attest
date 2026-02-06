@@ -226,6 +226,11 @@ defmodule NixosTest.Machine do
   end
 
   @impl true
+  def handle_call(:booted?, _from, state) do
+    {:reply, state.booted, state}
+  end
+
+  @impl true
   def handle_call(:stop, _from, %{qmp: nil} = state) do
     Logger.info("stopping machine #{state.name} (no QMP)")
     {:reply, :ok, %{state | booted: false, connected: false}}
@@ -366,13 +371,6 @@ defmodule NixosTest.Machine do
     end
   end
 
-  defp connect_shell(state, socket_path, timeout \\ 120_000) do
-    Logger.debug("waiting for shell connection at #{socket_path}")
-    {:ok, shell} = Shell.start_link(socket_path: socket_path)
-    :ok = Shell.wait_for_connection(shell, timeout)
-    %{state | shell: shell, connected: true}
-  end
-
   defp do_halt(state, timeout) do
     Logger.info("halting machine #{state.name}")
 
@@ -400,23 +398,6 @@ defmodule NixosTest.Machine do
     after
       timeout ->
         {:error, :timeout}
-    end
-  end
-
-  defp flush_port_messages(state) do
-    port = state.qemu_port
-
-    receive do
-      {^port, {:data, data}} ->
-        truncated = String.slice(to_string(data), 0, 500)
-        Logger.info("QEMU[#{state.name}] early: #{truncated}")
-        flush_port_messages(state)
-
-      {^port, {:exit_status, code}} ->
-        Logger.error("QEMU[#{state.name}] exited early with code: #{code}")
-        %{state | qemu_port: nil}
-    after
-      0 -> state
     end
   end
 
