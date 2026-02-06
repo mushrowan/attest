@@ -517,6 +517,17 @@ defmodule NixosTest.Machine do
   end
 
   @doc """
+  Send raw characters to the kernel serial console
+
+  Writes directly to QEMU's stdin, allowing interaction with the
+  systemd emergency mode or boot console.
+  """
+  @spec send_console(GenServer.server(), String.t()) :: :ok | {:error, term()}
+  def send_console(machine, chars) do
+    GenServer.call(machine, {:send_console, chars})
+  end
+
+  @doc """
   Take a screenshot
   """
   @spec screenshot(GenServer.server(), String.t()) :: :ok | {:error, term()}
@@ -739,6 +750,13 @@ defmodule NixosTest.Machine do
   def handle_call({:send_key, key}, _from, state) do
     Logger.info("sending key #{key} to #{state.name}")
     result = state.backend_mod.send_key(state.backend_state, key)
+    {:reply, result, state}
+  end
+
+  @impl true
+  def handle_call({:send_console, chars}, _from, state) do
+    Logger.info("sending console chars to #{state.name}")
+    result = state.backend_mod.send_console(state.backend_state, chars)
     {:reply, result, state}
   end
 

@@ -96,6 +96,9 @@ defmodule NixosTest.Machine.Backend.Mock do
   end
 
   @impl true
+  def send_console(_state, _chars), do: {:error, :unsupported}
+
+  @impl true
   def handle_port_exit(state, _code), do: state
 
   @impl true

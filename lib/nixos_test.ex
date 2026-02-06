@@ -279,6 +279,14 @@ defmodule NixosTest do
   end
 
   @doc """
+  Send raw characters to the kernel serial console.
+  """
+  @spec send_console(GenServer.server(), String.t()) :: :ok | {:error, term()}
+  def send_console(machine, chars) do
+    Machine.send_console(machine, chars)
+  end
+
+  @doc """
   Get accumulated console/serial output from the VM.
   """
   @spec get_console_log(GenServer.server()) :: String.t()

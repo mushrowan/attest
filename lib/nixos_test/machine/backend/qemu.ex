@@ -200,6 +200,16 @@ defmodule NixosTest.Machine.Backend.QEMU do
   end
 
   @impl true
+  def send_console(%{qemu_port: nil}, _chars), do: {:error, :not_running}
+
+  def send_console(%{qemu_port: port}, chars) do
+    Port.command(port, chars)
+    :ok
+  rescue
+    ArgumentError -> {:error, :port_closed}
+  end
+
+  @impl true
   def handle_port_exit(state, _code) do
     %{state | port_exited: true, qemu_port: nil}
   end

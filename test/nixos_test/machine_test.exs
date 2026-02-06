@@ -1357,6 +1357,18 @@ defmodule NixosTest.MachineTest do
     end
   end
 
+  describe "send_console/2" do
+    test "returns unsupported for mock backend" do
+      {:ok, machine} =
+        Machine.start_link(name: "sendconsole-test", backend: Backend.Mock)
+
+      :ok = Machine.start(machine)
+      assert {:error, :unsupported} = Machine.send_console(machine, "hello\n")
+
+      GenServer.stop(machine)
+    end
+  end
+
   describe "get_tty_text/2" do
     test "reads virtual terminal content via /dev/vcs" do
       socket_path =
