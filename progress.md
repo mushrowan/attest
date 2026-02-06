@@ -2,13 +2,16 @@
 
 ## 2026-02-06: snapshot create/restore (done)
 
-- `Backend.snapshot_create/2` and `Backend.snapshot_load/2` callbacks
-- `Backend.Firecracker` — PATCH /vm to pause, PUT /snapshot/create; PUT /snapshot/load, PATCH /vm to resume
+- `Backend.snapshot_create/2`, `Backend.snapshot_load/2`, `Backend.restore_from_snapshot/2` callbacks
+- `snapshot_create` — PATCH /vm to pause, PUT /snapshot/create
+- `snapshot_load` — PUT /snapshot/load, PATCH /vm to resume (existing FC process)
+- `restore_from_snapshot` — full lifecycle: kill old FC, spawn fresh, load, resume, reconnect shell via vsock
 - `Machine.snapshot_create/2`, `Machine.snapshot_restore/2` GenServer calls
+- `snapshot_restore` uses `restore_from_snapshot` and updates Machine shell pid
 - top-level `NixosTest.snapshot_create/2`, `NixosTest.snapshot_restore/2`
 - Backend.QEMU and Backend.Mock return `{:error, :unsupported}`
 
-122 tests passing, `nix flake check` green.
+123 tests passing, `nix flake check` green.
 
 ---
 
