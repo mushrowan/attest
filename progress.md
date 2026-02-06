@@ -1,5 +1,31 @@
 # progress log
 
+## 2026-02-06: hypervisor abstraction plan
+
+### context
+
+researched firecracker, cloud-hypervisor, microvm.nix as alternative VM backends.
+firecracker IS viable (previously dismissed) — vsock replaces virtconsole for shell
+backdoor, snapshot/restore enables "boot once, fork many" (~100ms restore vs ~5s boot),
+linux bridges replace VDE. cloud-hypervisor also viable (has virtconsole natively).
+GUI testing without VGA works via xvfb + xdotool inside guest.
+
+### decisions
+
+1. **backend owns full boot sequence** — Machine delegates to backend, backend handles
+   process spawning, control plane connection, shell setup, everything backend-specific
+2. **mock backend for tests** — no dual code paths; Machine always goes through backend
+   interface. `Backend.Mock` wraps injected qmp/shell pids. existing tests get mechanical
+   `backend: Backend.Mock` addition (~1 line each)
+3. **optional capabilities return `{:error, :unsupported}`** — screenshot, send_key, etc.
+   callers decide what to do
+
+### plan
+
+see PLAN.md for full implementation plan
+
+---
+
 ## 2026-01-31: multi-vm debugging (in progress)
 
 ### problem identified
