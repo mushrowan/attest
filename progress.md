@@ -1,5 +1,16 @@
 # progress log
 
+## 2026-02-06: console log capture (done)
+
+- `get_console_log/1` — returns accumulated serial/console output from VM
+- `wait_for_console_text/3` — poll console log until regex matches or timeout
+- port stdout/stderr data now appended to `console_log` field on Machine struct
+- both functions in top-level NixosTest API
+
+85 tests passing, `nix flake check` green.
+
+---
+
 ## 2026-02-06: systemd introspection + file copy (done)
 
 - `get_unit_info/2` — parse `systemctl show` into property map
