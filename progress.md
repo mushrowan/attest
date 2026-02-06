@@ -1,5 +1,28 @@
 # progress log
 
+## 2026-02-06: tty text, convenience wrappers, copy_from_vm (done)
+
+- `get_tty_text/2` — read `/dev/vcs<N>` virtual terminal content
+- `wait_until_tty_matches/4` — poll VT against regex
+- `wait_for_closed_port/3` — poll until TCP port is closed
+- `wait_for_open_unix_socket/3` — poll until unix socket exists
+- `start_job/2`, `stop_job/2` — systemctl start/stop wrappers
+- `copy_from_vm/3` — base64 file transfer from guest to host
+
+100 tests passing, `nix flake check` green.
+
+---
+
+## 2026-02-06: shell reconnect for reboot (done)
+
+- `Shell.reconnect/2` — closes old socket, calls transport.connect again
+- `Machine.reboot/2` — sends ctrl-alt-delete then waits for shell reconnect
+- machine fully usable after reboot returns
+
+93 tests passing, `nix flake check` green.
+
+---
+
 ## 2026-02-06: block/unblock, forward_port, reboot (done)
 
 ### network control
