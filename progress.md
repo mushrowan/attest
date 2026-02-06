@@ -1,5 +1,17 @@
 # progress log
 
+## 2026-02-06: systemd introspection + file copy (done)
+
+- `get_unit_info/2` — parse `systemctl show` into property map
+- `get_unit_property/3` — get single unit property
+- `require_unit_state/3` — assert unit state matches expected
+- `copy_from_host_via_shell/3` — transfer files via base64 over shell
+- `parse_unit_info/1` — public parser for systemctl show output
+
+82 tests passing, `nix flake check` green.
+
+---
+
 ## 2026-02-06: feature parity push (done)
 
 ### keyboard input

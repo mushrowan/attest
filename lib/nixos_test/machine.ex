@@ -24,7 +24,8 @@ defmodule NixosTest.Machine do
     :backend_state,
     booted: false,
     connected: false,
-    callbacks: []
+    callbacks: [],
+    console_log: ""
   ]
 
   # client API
@@ -332,6 +333,43 @@ defmodule NixosTest.Machine do
   end
 
   @doc """
+  Get the accumulated console/serial output
+  """
+  @spec get_console_log(GenServer.server()) :: String.t()
+  def get_console_log(machine) do
+    GenServer.call(machine, :get_console_log)
+  end
+
+  @doc """
+  Wait until the console output matches a regex
+
+  Polls the console log buffer at 200ms intervals.
+  """
+  @spec wait_for_console_text(GenServer.server(), Regex.t(), keyword()) ::
+          :ok | {:error, :timeout}
+  def wait_for_console_text(machine, regex, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 900_000)
+    deadline = System.monotonic_time(:millisecond) + timeout
+
+    poll_console_text(machine, regex, deadline)
+  end
+
+  defp poll_console_text(machine, regex, deadline) do
+    log = get_console_log(machine)
+
+    if Regex.match?(regex, log) do
+      :ok
+    else
+      if System.monotonic_time(:millisecond) >= deadline do
+        {:error, :timeout}
+      else
+        Process.sleep(200)
+        poll_console_text(machine, regex, deadline)
+      end
+    end
+  end
+
+  @doc """
   Take a screenshot
   """
   @spec screenshot(GenServer.server(), String.t()) :: :ok | {:error, term()}
@@ -557,12 +595,18 @@ defmodule NixosTest.Machine do
     {:reply, result, state}
   end
 
+  @impl true
+  def handle_call(:get_console_log, _from, state) do
+    {:reply, state.console_log, state}
+  end
+
   # port stdout/stderr data from QEMU backend (port owner is Machine process)
   @impl true
   def handle_info({port, {:data, data}}, state) when is_port(port) do
-    truncated = String.slice(to_string(data), 0, 200)
+    text = to_string(data)
+    truncated = String.slice(text, 0, 200)
     Logger.info("QEMU[#{state.name}]: #{truncated}")
-    {:noreply, state}
+    {:noreply, %{state | console_log: state.console_log <> text}}
   end
 
   # exit_status: update backend state so it knows the process exited

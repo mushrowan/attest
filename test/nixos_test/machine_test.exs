@@ -950,6 +950,61 @@ defmodule NixosTest.MachineTest do
     end
   end
 
+  describe "get_console_log/1" do
+    test "returns accumulated console output" do
+      {:ok, machine} =
+        Machine.start_link(name: "console-log-test", backend: Backend.Mock)
+
+      # initially empty
+      assert "" = Machine.get_console_log(machine)
+
+      # simulate QEMU port output by sending port-style messages
+      # we use send/2 since Machine handles these in handle_info
+      fake_port = Port.open({:spawn, "echo test"}, [:binary])
+      send(machine, {fake_port, {:data, "booting kernel...\n"}})
+      send(machine, {fake_port, {:data, "systemd started\n"}})
+      # give GenServer time to process
+      Process.sleep(50)
+
+      log = Machine.get_console_log(machine)
+      assert log =~ "booting kernel"
+      assert log =~ "systemd started"
+
+      GenServer.stop(machine)
+    end
+  end
+
+  describe "wait_for_console_text/3" do
+    test "returns when regex matches console output" do
+      {:ok, machine} =
+        Machine.start_link(name: "console-wait-test", backend: Backend.Mock)
+
+      # send some output asynchronously after a short delay
+      fake_port = Port.open({:spawn, "echo test"}, [:binary])
+
+      spawn(fn ->
+        Process.sleep(100)
+        send(machine, {fake_port, {:data, "loading modules...\n"}})
+        Process.sleep(100)
+        send(machine, {fake_port, {:data, "login: ready\n"}})
+      end)
+
+      assert :ok = Machine.wait_for_console_text(machine, ~r/login.*ready/, timeout: 5000)
+
+      GenServer.stop(machine)
+    end
+
+    test "returns error on timeout" do
+      {:ok, machine} =
+        Machine.start_link(name: "console-timeout-test", backend: Backend.Mock)
+
+      assert {:error, :timeout} =
+               Machine.wait_for_console_text(machine, ~r/never appears/, timeout: 200)
+
+      GenServer.stop(machine)
+    end
+  end
+
   describe "parse_unit_info/1" do
     test "parses systemctl show output into map" do
       output = """

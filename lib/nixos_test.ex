@@ -187,4 +187,21 @@ defmodule NixosTest do
   def send_chars(machine, chars, opts \\ []) do
     Machine.send_chars(machine, chars, opts)
   end
+
+  @doc """
+  Get accumulated console/serial output from the VM.
+  """
+  @spec get_console_log(GenServer.server()) :: String.t()
+  def get_console_log(machine) do
+    Machine.get_console_log(machine)
+  end
+
+  @doc """
+  Wait until the console output matches a regex.
+  """
+  @spec wait_for_console_text(GenServer.server(), Regex.t(), keyword()) ::
+          :ok | {:error, :timeout}
+  def wait_for_console_text(machine, regex, opts \\ []) do
+    Machine.wait_for_console_text(machine, regex, opts)
+  end
 end
