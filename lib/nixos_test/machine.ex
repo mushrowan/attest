@@ -370,6 +370,42 @@ defmodule NixosTest.Machine do
   end
 
   @doc """
+  Disable the inter-VM network link (simulates cable unplug)
+  """
+  @spec block(GenServer.server()) :: :ok | {:error, term()}
+  def block(machine) do
+    GenServer.call(machine, :block)
+  end
+
+  @doc """
+  Re-enable the inter-VM network link (simulates cable plug)
+  """
+  @spec unblock(GenServer.server()) :: :ok | {:error, term()}
+  def unblock(machine) do
+    GenServer.call(machine, :unblock)
+  end
+
+  @doc """
+  Add a TCP port forward from host to guest via QEMU SLIRP networking
+  """
+  @spec forward_port(GenServer.server(), non_neg_integer(), non_neg_integer()) ::
+          :ok | {:error, term()}
+  def forward_port(machine, host_port, guest_port) do
+    GenServer.call(machine, {:forward_port, host_port, guest_port})
+  end
+
+  @doc """
+  Reboot the VM by sending ctrl-alt-delete
+
+  Sets the machine to disconnected state. The shell will need to
+  reconnect when the VM finishes rebooting.
+  """
+  @spec reboot(GenServer.server()) :: :ok | {:error, term()}
+  def reboot(machine) do
+    GenServer.call(machine, :reboot)
+  end
+
+  @doc """
   Take a screenshot
   """
   @spec screenshot(GenServer.server(), String.t()) :: :ok | {:error, term()}
@@ -593,6 +629,40 @@ defmodule NixosTest.Machine do
     Logger.info("sending key #{key} to #{state.name}")
     result = state.backend_mod.send_key(state.backend_state, key)
     {:reply, result, state}
+  end
+
+  @impl true
+  def handle_call(:block, _from, state) do
+    Logger.info("blocking network on #{state.name}")
+    result = state.backend_mod.block(state.backend_state)
+    {:reply, result, state}
+  end
+
+  @impl true
+  def handle_call(:unblock, _from, state) do
+    Logger.info("unblocking network on #{state.name}")
+    result = state.backend_mod.unblock(state.backend_state)
+    {:reply, result, state}
+  end
+
+  @impl true
+  def handle_call({:forward_port, host_port, guest_port}, _from, state) do
+    Logger.info("forwarding port #{host_port} -> #{guest_port} on #{state.name}")
+    result = state.backend_mod.forward_port(state.backend_state, host_port, guest_port)
+    {:reply, result, state}
+  end
+
+  @impl true
+  def handle_call(:reboot, _from, state) do
+    Logger.info("rebooting #{state.name}")
+
+    case state.backend_mod.send_key(state.backend_state, "ctrl-alt-delete") do
+      :ok ->
+        {:reply, :ok, %{state | connected: false, booted: false}}
+
+      {:error, _} = err ->
+        {:reply, err, state}
+    end
   end
 
   @impl true

@@ -168,12 +168,44 @@ defmodule NixosTest.Machine.Backend.QEMU do
   end
 
   @impl true
+  def block(%{qmp: nil}), do: {:error, :unsupported}
+
+  def block(%{qmp: qmp}) do
+    case QMP.command(qmp, "set_link", %{"name" => "virtio-net-pci.1", "up" => false}) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @impl true
+  def unblock(%{qmp: nil}), do: {:error, :unsupported}
+
+  def unblock(%{qmp: qmp}) do
+    case QMP.command(qmp, "set_link", %{"name" => "virtio-net-pci.1", "up" => true}) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @impl true
+  def forward_port(%{qmp: nil}, _host_port, _guest_port), do: {:error, :unsupported}
+
+  def forward_port(%{qmp: qmp}, host_port, guest_port) do
+    cmd = "hostfwd_add tcp::#{host_port}-:#{guest_port}"
+
+    case QMP.command(qmp, "human-monitor-command", %{"command-line" => cmd}) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @impl true
   def handle_port_exit(state, _code) do
     %{state | port_exited: true, qemu_port: nil}
   end
 
   @impl true
-  def capabilities(_state), do: [:screenshot, :send_key]
+  def capabilities(_state), do: [:screenshot, :send_key, :network_control, :port_forward]
 
   # private helpers
 

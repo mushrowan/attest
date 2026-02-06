@@ -189,6 +189,39 @@ defmodule NixosTest do
   end
 
   @doc """
+  Disable the inter-VM network link (simulates cable unplug).
+  """
+  @spec block(GenServer.server()) :: :ok | {:error, term()}
+  def block(machine) do
+    Machine.block(machine)
+  end
+
+  @doc """
+  Re-enable the inter-VM network link (simulates cable plug).
+  """
+  @spec unblock(GenServer.server()) :: :ok | {:error, term()}
+  def unblock(machine) do
+    Machine.unblock(machine)
+  end
+
+  @doc """
+  Add a TCP port forward from host to guest.
+  """
+  @spec forward_port(GenServer.server(), non_neg_integer(), non_neg_integer()) ::
+          :ok | {:error, term()}
+  def forward_port(machine, host_port, guest_port) do
+    Machine.forward_port(machine, host_port, guest_port)
+  end
+
+  @doc """
+  Reboot the VM by sending ctrl-alt-delete.
+  """
+  @spec reboot(GenServer.server()) :: :ok | {:error, term()}
+  def reboot(machine) do
+    Machine.reboot(machine)
+  end
+
+  @doc """
   Get accumulated console/serial output from the VM.
   """
   @spec get_console_log(GenServer.server()) :: String.t()

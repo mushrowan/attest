@@ -1005,6 +1005,242 @@ defmodule NixosTest.MachineTest do
     end
   end
 
+  describe "block/1 and unblock/1" do
+    test "block returns unsupported without QMP" do
+      {:ok, machine} =
+        Machine.start_link(name: "block-noqmp-test", backend: Backend.Mock)
+
+      :ok = Machine.start(machine)
+      assert {:error, :unsupported} = Machine.block(machine)
+
+      GenServer.stop(machine)
+    end
+
+    test "unblock returns unsupported without QMP" do
+      {:ok, machine} =
+        Machine.start_link(name: "unblock-noqmp-test", backend: Backend.Mock)
+
+      :ok = Machine.start(machine)
+      assert {:error, :unsupported} = Machine.unblock(machine)
+
+      GenServer.stop(machine)
+    end
+
+    test "block/unblock with QMP sends set_link commands" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "qmp-block-#{:rand.uniform(100_000)}.sock")
+
+      File.rm(socket_path)
+
+      {:ok, listen} =
+        :gen_tcp.listen(0, [
+          :binary,
+          {:packet, :line},
+          {:active, false},
+          {:ip, {:local, socket_path}}
+        ])
+
+      test_pid = self()
+
+      spawn(fn ->
+        {:ok, client} = :gen_tcp.accept(listen)
+
+        :ok =
+          :gen_tcp.send(
+            client,
+            ~s({"QMP": {"version": {"qemu": {"major": 8}}, "capabilities": []}}\n)
+          )
+
+        # qmp_capabilities
+        {:ok, _} = :gen_tcp.recv(client, 0, 5000)
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        # block (set_link)
+        {:ok, cmd1} = :gen_tcp.recv(client, 0, 5000)
+        send(test_pid, {:qmp_block, cmd1})
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        # unblock (set_link)
+        {:ok, cmd2} = :gen_tcp.recv(client, 0, 5000)
+        send(test_pid, {:qmp_unblock, cmd2})
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        receive do
+          :stop -> :ok
+        end
+      end)
+
+      {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+
+      {:ok, machine} =
+        Machine.start_link(name: "block-qmp-test", backend: Backend.Mock, qmp: qmp)
+
+      :ok = Machine.start(machine)
+
+      assert :ok = Machine.block(machine)
+      assert_receive {:qmp_block, cmd1}, 1000
+      assert cmd1 =~ "set_link"
+
+      assert :ok = Machine.unblock(machine)
+      assert_receive {:qmp_unblock, cmd2}, 1000
+      assert cmd2 =~ "set_link"
+
+      GenServer.stop(machine)
+      GenServer.stop(qmp)
+      :gen_tcp.close(listen)
+      File.rm(socket_path)
+    end
+  end
+
+  describe "forward_port/3" do
+    test "forward_port without QMP returns unsupported" do
+      {:ok, machine} =
+        Machine.start_link(name: "fwd-noqmp-test", backend: Backend.Mock)
+
+      :ok = Machine.start(machine)
+      assert {:error, :unsupported} = Machine.forward_port(machine, 8080, 80)
+
+      GenServer.stop(machine)
+    end
+
+    test "forward_port with QMP sends human-monitor-command" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "qmp-fwd-#{:rand.uniform(100_000)}.sock")
+
+      File.rm(socket_path)
+
+      {:ok, listen} =
+        :gen_tcp.listen(0, [
+          :binary,
+          {:packet, :line},
+          {:active, false},
+          {:ip, {:local, socket_path}}
+        ])
+
+      test_pid = self()
+
+      spawn(fn ->
+        {:ok, client} = :gen_tcp.accept(listen)
+
+        :ok =
+          :gen_tcp.send(
+            client,
+            ~s({"QMP": {"version": {"qemu": {"major": 8}}, "capabilities": []}}\n)
+          )
+
+        # qmp_capabilities
+        {:ok, _} = :gen_tcp.recv(client, 0, 5000)
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        # human-monitor-command
+        {:ok, cmd} = :gen_tcp.recv(client, 0, 5000)
+        send(test_pid, {:qmp_fwd, cmd})
+        :ok = :gen_tcp.send(client, ~s({"return": ""}\n))
+
+        receive do
+          :stop -> :ok
+        end
+      end)
+
+      {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+
+      {:ok, machine} =
+        Machine.start_link(name: "fwd-qmp-test", backend: Backend.Mock, qmp: qmp)
+
+      :ok = Machine.start(machine)
+
+      assert :ok = Machine.forward_port(machine, 8080, 80)
+
+      assert_receive {:qmp_fwd, cmd}, 1000
+      assert cmd =~ "human-monitor-command"
+      assert cmd =~ "hostfwd_add"
+      assert cmd =~ "8080"
+      assert cmd =~ "80"
+
+      GenServer.stop(machine)
+      GenServer.stop(qmp)
+      :gen_tcp.close(listen)
+      File.rm(socket_path)
+    end
+  end
+
+  describe "reboot/2" do
+    test "reboot sends ctrl-alt-delete and marks disconnected" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "qmp-reboot-#{:rand.uniform(100_000)}.sock")
+
+      File.rm(socket_path)
+
+      {:ok, listen} =
+        :gen_tcp.listen(0, [
+          :binary,
+          {:packet, :line},
+          {:active, false},
+          {:ip, {:local, socket_path}}
+        ])
+
+      test_pid = self()
+
+      spawn(fn ->
+        {:ok, client} = :gen_tcp.accept(listen)
+
+        :ok =
+          :gen_tcp.send(
+            client,
+            ~s({"QMP": {"version": {"qemu": {"major": 8}}, "capabilities": []}}\n)
+          )
+
+        # qmp_capabilities
+        {:ok, _} = :gen_tcp.recv(client, 0, 5000)
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        # send-key (ctrl-alt-delete)
+        {:ok, cmd} = :gen_tcp.recv(client, 0, 5000)
+        send(test_pid, {:qmp_reboot, cmd})
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        receive do
+          :stop -> :ok
+        end
+      end)
+
+      {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+
+      {:ok, machine} =
+        Machine.start_link(
+          name: "reboot-test",
+          backend: Backend.Mock,
+          qmp: qmp
+        )
+
+      :ok = Machine.start(machine)
+
+      # reboot sends ctrl-alt-delete and sets connected=false
+      assert :ok = Machine.reboot(machine)
+
+      assert_receive {:qmp_reboot, cmd}, 1000
+      assert cmd =~ "send-key"
+      assert cmd =~ "ctrl"
+      assert cmd =~ "alt"
+      assert cmd =~ "delete"
+
+      GenServer.stop(machine)
+      GenServer.stop(qmp)
+      :gen_tcp.close(listen)
+      File.rm(socket_path)
+    end
+
+    test "reboot without QMP returns unsupported" do
+      {:ok, machine} =
+        Machine.start_link(name: "reboot-noqmp-test", backend: Backend.Mock)
+
+      :ok = Machine.start(machine)
+      assert {:error, :unsupported} = Machine.reboot(machine)
+
+      GenServer.stop(machine)
+    end
+  end
+
   describe "parse_unit_info/1" do
     test "parses systemctl show output into map" do
       output = """
