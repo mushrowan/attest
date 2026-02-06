@@ -1,11 +1,30 @@
 # progress log
 
-## 2026-02-06: phase 1 bugfixes (done)
+## 2026-02-06: hypervisor abstraction complete (done)
 
-- added missing `handle_call(:booted?, ...)` — 4 tests were failing with FunctionClauseError
-- removed unused `connect_shell/3` and `flush_port_messages/1`
-- 43/43 tests passing, `nix flake check` green
-- next: phase 2 — Backend behaviour + Mock + QEMU extraction
+all 4 phases from PLAN.md implemented:
+
+### phase 1: bugfixes
+- added missing `handle_call(:booted?)` — fixed 4 test failures
+- removed dead code (`connect_shell/3`, `flush_port_messages/1`)
+
+### phase 2: Backend behaviour
+- `Machine.Backend` behaviour with 10 callbacks
+- `Backend.QEMU` extracted from machine.ex (Port.open, QMP, shell)
+- `Backend.Mock` wraps injected pids for unit tests
+- Machine GenServer refactored to delegate to backend
+- port exit tracking via `handle_port_exit` callback
+
+### phase 3: Shell.Transport behaviour
+- `Shell.Transport` behaviour with connect/close callbacks
+- `Transport.VirtConsole` extracted from shell.ex (unix socket listen/accept)
+- Shell GenServer refactored to use pluggable transport
+
+### phase 4: docs
+- ARCHITECTURE.md rewritten to match current code
+- progress.md updated
+
+64 tests passing, `nix flake check` green.
 
 ---
 

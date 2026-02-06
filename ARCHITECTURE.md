@@ -12,337 +12,148 @@ elixir/OTP is almost purpose-built for this problem:
 | timeout handling | built-in GenServer timeouts |
 | parallel test execution | Task.async_stream |
 | fault tolerance | "let it crash" philosophy |
-| hot code reload | built-in (useful for interactive mode) |
 
 ## architecture overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Application Supervisor                        │
-│                     (NixosTest.Application)                         │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-          ┌───────────────────────┼───────────────────────┐
-          ▼                       ▼                       ▼
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Driver         │     │  VLan.Supervisor │     │  Logger         │
-│  (GenServer)    │     │  (DynamicSup)   │     │  (GenServer)    │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-          │                       │
-          │               ┌───────┴───────┐
-          │               ▼               ▼
-          │       ┌─────────────┐ ┌─────────────┐
-          │       │ VLan 1      │ │ VLan 2      │
-          │       │ (GenServer) │ │ (GenServer) │
-          │       └─────────────┘ └─────────────┘
-          │
-          ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Machine.Supervisor                              │
-│                      (DynamicSupervisor)                            │
-└─────────────────────────────────────────────────────────────────────┘
-          │
-          ├─────────────────┬─────────────────┬─────────────────┐
-          ▼                 ▼                 ▼                 ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│ Machine "web"   │ │ Machine "db"    │ │ Machine "client"│
-│ (GenServer)     │ │ (GenServer)     │ │ (GenServer)     │
-│                 │ │                 │ │                 │
-│ ┌─────────────┐ │ │ ┌─────────────┐ │ │ ┌─────────────┐ │
-│ │ QMP Client  │ │ │ │ QMP Client  │ │ │ │ QMP Client  │ │
-│ │ (GenServer) │ │ │ │ (GenServer) │ │ │ │ (GenServer) │ │
-│ └─────────────┘ │ │ └─────────────┘ │ │ └─────────────┘ │
-│ ┌─────────────┐ │ │ ┌─────────────┐ │ │ ┌─────────────┐ │
-│ │ Shell       │ │ │ │ Shell       │ │ │ │ Shell       │ │
-│ │ (GenServer) │ │ │ │ (GenServer) │ │ │ │ (GenServer) │ │
-│ └─────────────┘ │ │ └─────────────┘ │ │ └─────────────┘ │
-└─────────────────┘ └─────────────────┘ └─────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    Application Supervisor                        │
+│                  (NixosTest.Application)                        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+          ┌───────────────────┼──────────────────┐
+          ▼                   ▼                  ▼
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────┐
+│ Driver           │ │ MachineRegistry  │ │ MachineSup   │
+│ (GenServer)      │ │ (Registry)       │ │ (DynSup)     │
+└──────────────────┘ └──────────────────┘ └──────────────┘
+          │                                      │
+          ▼                                      │
+    start_all/1                         ┌────────┼────────┐
+    get_machine/2                       ▼        ▼        ▼
+                                   Machine   Machine   Machine
+                                   "web"     "db"      "client"
 ```
 
-## module breakdown
+## machine + backend architecture
 
-### NixosTest.Application
-- OTP application entry point
-- starts top-level supervisor
-- configures logging
-
-### NixosTest.Driver (GenServer)
-- main coordinator
-- loads test configuration
-- spawns machines via Machine.Supervisor
-- executes test script
-- handles global timeout
-- exposes API for test scripts
-
-```elixir
-# state
-%Driver{
-  machines: %{name => pid},
-  vlans: %{nr => pid},
-  test_script: fun(),
-  out_dir: Path.t(),
-  global_timeout: integer()
-}
 ```
+Machine GenServer (public API)
+├── execute, wait_for_unit, wait_for_open_port (shell-based)
+├── start, shutdown, halt, screenshot (delegated to backend)
+└── delegates to Backend behaviour
+    ├── Backend.QEMU      — Port.open, QMP, virtconsole shell
+    ├── Backend.Mock      — injected pids for unit tests
+    └── (future)
+        ├── Backend.Firecracker   — REST API, vsock shell
+        └── Backend.CloudHypervisor — REST API, virtconsole
 
-### NixosTest.Machine (GenServer)
-- represents one QEMU VM
-- manages VM lifecycle (boot, shutdown, reboot)
-- owns QMP and Shell child processes
-- provides test API: succeed/1, fail/1, wait_for_unit/2, etc
-
-```elixir
-# state
-%Machine{
-  name: String.t(),
-  start_command: String.t(),
-  qmp: pid(),           # QMP client process
-  shell: pid(),         # shell backdoor process
-  qemu: port(),         # QEMU OS process
-  booted: boolean(),
-  connected: boolean(),
-  state_dir: Path.t(),
-  shared_dir: Path.t()
-}
-
-# key callbacks
-handle_call(:start, ...)        -> boots QEMU, connects shell
-handle_call({:execute, cmd}, ...)  -> runs command via shell
-handle_call(:screenshot, ...)   -> captures via QMP
-handle_info({:EXIT, qemu, _}, ...)  -> handles VM crash
-```
-
-### NixosTest.Machine.QMP (GenServer)
-- QEMU Machine Protocol client
-- JSON over unix socket
-- handles async events (STOP, RESUME, SHUTDOWN)
-- provides: screenshot, sendkey, quit, device_add, etc
-
-```elixir
-# state
-%QMP{
-  socket: :gen_tcp.socket(),
-  pending: %{id => from},  # pending requests
-  events: [event()]        # queued events
-}
-
-# protocol
-send: {"execute": "screendump", "arguments": {"filename": "/tmp/shot.ppm"}}
-recv: {"return": {}}
-recv: {"event": "STOP", "timestamp": ...}
-```
-
-### NixosTest.Machine.Shell (GenServer)
-- virtconsole shell backdoor
-- executes commands inside guest
-- handles output streaming
-- protocol: send command, read until magic delimiter
-
-```elixir
-# protocol (same as python driver)
-send: "( <command> ); echo '|!=EOF' $?\n"
-recv: <output...> |!=EOF 0\n
-parse: {output, exit_code}
-```
-
-### NixosTest.VLan (GenServer)
-- manages vde_switch process
-- provides socket path for VMs to connect
-- handles cleanup on termination
-
-```elixir
-%VLan{
-  nr: integer(),
-  switch: port(),        # vde_switch OS process
-  socket_dir: Path.t()
-}
-```
-
-### NixosTest.Logger (GenServer)
-- structured logging with nesting
-- outputs: terminal (coloured), XML, JUnit XML
-- handles per-machine log prefixing
-
-```elixir
-# API
-Logger.nested("booting machines", fn ->
-  Logger.log("starting web")
-  ...
-end)
-
-Logger.log_serial("web", "[  OK  ] Started nginx")
-```
-
-## test DSL
-
-tests would be written in elixir (or a small DSL that compiles to elixir):
-
-```elixir
-# option 1: native elixir
-defmodule MyTest do
-  use NixosTest
-
-  test "nginx serves content" do
-    start_all()
-    
-    machine("web") |> wait_for_unit("nginx.service")
-    machine("client") |> succeed("curl http://web")
-  end
-end
-
-# option 2: lightweight DSL (embedded in nix)
-testScript = ''
-  start_all!
-  
-  web |> wait_for_unit "nginx.service"
-  client |> succeed "curl http://web"
-'';
-
-# option 3: data-driven (for simpler tests)
-testScript = {
-  steps = [
-    { action = "start_all"; }
-    { action = "wait_for_unit"; machine = "web"; unit = "nginx.service"; }
-    { action = "succeed"; machine = "client"; command = "curl http://web"; }
-  ];
-};
-```
-
-## key advantages over python
-
-### 1. supervision & fault tolerance
-```elixir
-# if a VM crashes unexpectedly, supervisor can:
-# - restart it (with backoff)
-# - notify the driver
-# - collect crash info
-# python just... crashes
-```
-
-### 2. true concurrency
-```elixir
-# boot all VMs in parallel, properly
-Task.async_stream(machines, &Machine.start/1)
-|> Enum.to_list()
-
-# python uses threading with GIL limitations
-```
-
-### 3. pattern matching for protocol handling
-```elixir
-def handle_qmp_message(%{"event" => "SHUTDOWN"}, state) do
-  {:noreply, %{state | shutting_down: true}}
-end
-
-def handle_qmp_message(%{"return" => result, "id" => id}, state) do
-  GenServer.reply(state.pending[id], {:ok, result})
-  {:noreply, %{state | pending: Map.delete(state.pending, id)}}
-end
-
-def handle_qmp_message(%{"error" => err}, state) do
-  {:stop, {:qmp_error, err}, state}
-end
-```
-
-### 4. timeouts are first-class
-```elixir
-def wait_for_unit(machine, unit, timeout \\ 900_000) do
-  GenServer.call(machine, {:wait_for_unit, unit}, timeout)
-end
-# automatic timeout handling, no manual threading
-```
-
-### 5. interactive mode via IEx
-```elixir
-# drop into IEx with full access to running VMs
-iex> web |> succeed("systemctl status nginx")
-iex> web |> screenshot("debug.png")
-iex> Process.info(web)  # inspect GenServer state
+Shell GenServer (command protocol)
+└── delegates connection to Transport behaviour
+    ├── Transport.VirtConsole — listen/accept on unix socket
+    └── (future)
+        └── Transport.Vsock   — firecracker vsock
 ```
 
 ## file structure
 
 ```
-nixos-test-ng/
-├── mix.exs
-├── lib/
-│   ├── nixos_test.ex                 # main API
-│   ├── nixos_test/
-│   │   ├── application.ex            # OTP app
-│   │   ├── driver.ex                 # coordinator
-│   │   ├── machine.ex                # VM genserver
-│   │   ├── machine/
-│   │   │   ├── qmp.ex                # QMP client
-│   │   │   ├── shell.ex              # shell backdoor
-│   │   │   └── start_command.ex      # QEMU command builder
-│   │   ├── vlan.ex                   # VDE switch
-│   │   ├── logger.ex                 # structured logging
-│   │   └── dsl.ex                    # test DSL macros
-│   └── mix/
-│       └── tasks/
-│           └── nixos_test.ex         # mix nixos.test task
-├── test/
-│   └── nixos_test_test.exs
-└── nix/
-    ├── default.nix                   # package definition
-    ├── module.nix                    # nixos test module integration
-    └── flake.nix                     # flake wrapper
+lib/nixos_test/
+├── application.ex                   # OTP app, supervisors
+├── cli.ex                           # escript CLI (eval, eval-file)
+├── driver.ex                        # test coordinator GenServer
+├── machine.ex                       # VM GenServer, delegates to backend
+└── machine/
+    ├── backend.ex                   # @behaviour
+    ├── backend/
+    │   ├── qemu.ex                  # QEMU: Port.open, QMP, shell
+    │   └── mock.ex                  # unit test mock
+    ├── qmp.ex                       # QMP protocol client GenServer
+    ├── shell.ex                     # command protocol GenServer
+    └── shell/
+        ├── transport.ex             # @behaviour
+        └── transport/
+            └── virtconsole.ex       # unix socket listen/accept
 ```
 
-## nix integration
+## module details
 
-the driver would be packaged for nix and integrate with the existing test infrastructure:
+### Machine (GenServer)
 
-```nix
-# nix/module.nix - drop-in replacement for testing-python.nix
-{ config, lib, pkgs, ... }:
+the public API for interacting with VMs. keeps shell-based operations
+(execute, wait_for_unit, wait_for_open_port) and delegates everything
+backend-specific through the Backend behaviour.
 
-{
-  options.test = {
-    driver = lib.mkOption {
-      type = lib.types.enum [ "python" "elixir" ];
-      default = "python";
-      description = "which test driver to use";
-    };
-  };
-
-  config = lib.mkIf (config.test.driver == "elixir") {
-    # use elixir driver instead
-    test.driverPackage = pkgs.nixos-test-ng;
-  };
+```elixir
+%Machine{
+  name: String.t(),
+  shell: pid(),            # Shell GenServer pid (from backend)
+  backend_mod: module(),   # e.g. Backend.QEMU
+  backend_state: term(),   # opaque, managed by backend
+  booted: boolean(),
+  connected: boolean()
 }
 ```
 
-## migration path
+### Backend behaviour
 
-1. **phase 1**: implement core driver, run alongside python
-2. **phase 2**: compatibility layer for existing python test scripts
-3. **phase 3**: new tests written in elixir DSL
-4. **phase 4**: gradually migrate existing tests
-5. **phase 5**: deprecate python driver
+each backend owns the full boot sequence: process spawning, control
+plane connection, shell setup. callbacks:
 
-## open questions
+- `init/1`, `start/1` — lifecycle
+- `shutdown/2`, `halt/2`, `wait_for_shutdown/2` — teardown
+- `cleanup/1` — resource cleanup
+- `screenshot/2`, `send_key/2` — optional capabilities
+- `handle_port_exit/2` — port exit notification
+- `capabilities/1` — introspection
 
-- **test script format**: native elixir, custom DSL, or data-driven?
-- **backwards compat**: transpile python test scripts to elixir?
-- **OCR support**: port tesseract integration or shell out?
-- **remote debugging**: equivalent to python's remote_pdb?
-- **nix integration**: how to pass test script from nix to elixir?
+### Backend.QEMU
 
-## estimated effort
+extracts all QEMU-specific code from the old machine.ex:
+- spawns QEMU via `Port.open`
+- creates Shell listener, waits for virtconsole connection
+- connects QMP with retry logic
+- halt sends QMP `quit`, shutdown sends `poweroff` via shell
 
-| component | complexity | lines (est) |
-|-----------|------------|-------------|
-| application/supervisor | low | ~50 |
-| driver | medium | ~200 |
-| machine | high | ~400 |
-| qmp client | medium | ~150 |
-| shell client | medium | ~100 |
-| vlan | low | ~80 |
-| logger | medium | ~150 |
-| test DSL | medium | ~200 |
-| CLI | low | ~100 |
-| nix integration | medium | ~100 |
-| **total** | | **~1500** |
+### Backend.Mock
 
-comparable to the python driver (~1500 lines), but with better structure.
+wraps injected QMP and Shell pids for unit testing. all lifecycle
+operations are no-ops. screenshot delegates to QMP if available.
+
+### Shell (GenServer)
+
+transport-agnostic command protocol. delegates connection to a
+Transport implementation, then sends/receives using the base64
+protocol:
+
+1. send: `bash -c '<command>' | (base64 -w 0; echo)\n`
+2. recv: `<base64 output>\n`
+3. send: `echo ${PIPESTATUS[0]}\n`
+4. recv: `<exit code>\n`
+
+### Transport.VirtConsole
+
+listens on a unix socket, accepts guest connection, waits for
+"Spawning backdoor root shell..." ready message. used by QEMU
+and cloud-hypervisor backends.
+
+### QMP (GenServer)
+
+QEMU Machine Protocol client. JSON over unix socket. handles
+greeting/capability negotiation, skips async events when waiting
+for command responses.
+
+### Driver (GenServer)
+
+coordinates test execution. creates machines via MachineSupervisor,
+provides `start_all/1` for parallel boot, `get_machine/2` for
+lookup. handles global timeout.
+
+## future work
+
+- `Backend.Firecracker` — REST API, vsock shell, snapshot/restore
+- `Transport.Vsock` — firecracker vsock UDS + CONNECT protocol
+- `Network` behaviour — bridge-based networking (replaces VDE)
+- snapshot/restore for "boot once, fork many" test execution
+- in-guest screenshots via xvfb + imagemagick (non-QEMU backends)
+- test DSL / nix integration
