@@ -105,6 +105,9 @@ defmodule NixosTest.Machine.Backend.Mock do
   def snapshot_load(_state, _snapshot_dir), do: {:error, :unsupported}
 
   @impl true
+  def restore_from_snapshot(_state, _snapshot_dir), do: {:error, :unsupported}
+
+  @impl true
   def handle_port_exit(state, _code), do: state
 
   @impl true

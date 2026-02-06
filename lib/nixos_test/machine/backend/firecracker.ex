@@ -262,6 +262,61 @@ defmodule NixosTest.Machine.Backend.Firecracker do
     end
   end
 
+  @impl true
+  def restore_from_snapshot(state, snapshot_dir) do
+    Logger.info("restoring #{state.name} from snapshot in #{snapshot_dir}")
+
+    # kill old shell
+    if state.shell && Process.alive?(state.shell) do
+      GenServer.stop(state.shell, :normal)
+    end
+
+    # kill old FC process
+    if state.fc_port do
+      try do
+        Port.close(state.fc_port)
+      rescue
+        ArgumentError -> :ok
+      end
+    end
+
+    # clean up old sockets
+    File.rm(state.api_socket_path)
+    File.rm(state.vsock_uds_path)
+
+    # spawn fresh firecracker process
+    cmd = "#{state.firecracker_bin} --api-sock #{state.api_socket_path}"
+
+    port =
+      Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout])
+
+    state = %{state | fc_port: port, port_exited: false, shell: nil}
+
+    # wait for API socket
+    :ok = wait_for_file(state.api_socket_path, 10_000)
+
+    # load snapshot and resume
+    :ok = snapshot_load(state, snapshot_dir)
+
+    # wait for vsock UDS (restored VM recreates it)
+    :ok = wait_for_file(state.vsock_uds_path, 30_000)
+
+    # reconnect shell via vsock
+    Logger.info("reconnecting shell via vsock for #{state.name}")
+
+    {:ok, shell} =
+      Shell.start_link(
+        socket_path: state.vsock_uds_path,
+        transport: Vsock,
+        transport_config: %{uds_path: state.vsock_uds_path, port: state.vsock_port}
+      )
+
+    :ok = Shell.wait_for_connection(shell, 120_000)
+    state = %{state | shell: shell}
+
+    {:ok, shell, state}
+  end
+
   # network control via host-side ip link commands
 
   @impl true

@@ -838,8 +838,22 @@ defmodule NixosTest.Machine do
   @impl true
   def handle_call({:snapshot_restore, snapshot_dir}, _from, state) do
     Logger.info("restoring snapshot for #{state.name} from #{snapshot_dir}")
-    result = state.backend_mod.snapshot_load(state.backend_state, snapshot_dir)
-    {:reply, result, state}
+
+    case state.backend_mod.restore_from_snapshot(state.backend_state, snapshot_dir) do
+      {:ok, shell_pid, backend_state} ->
+        state = %{
+          state
+          | backend_state: backend_state,
+            shell: shell_pid,
+            booted: true,
+            connected: shell_pid != nil
+        }
+
+        {:reply, :ok, state}
+
+      {:error, _} = err ->
+        {:reply, err, state}
+    end
   end
 
   @impl true

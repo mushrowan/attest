@@ -1735,7 +1735,7 @@ defmodule NixosTest.MachineTest do
   end
 
   describe "snapshot_restore/2" do
-    test "delegates to backend snapshot_load" do
+    test "returns unsupported for mock backend" do
       {:ok, machine} =
         Machine.start_link(name: "snap-restore-test", backend: Backend.Mock)
 
