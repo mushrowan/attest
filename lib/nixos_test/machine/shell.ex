@@ -35,7 +35,9 @@ defmodule NixosTest.Machine.Shell do
   def start_link(opts) do
     socket_path = Keyword.fetch!(opts, :socket_path)
     transport = Keyword.get(opts, :transport, VirtConsole)
-    GenServer.start_link(__MODULE__, {socket_path, transport}, Keyword.take(opts, [:name]))
+    transport_config = Keyword.get(opts, :transport_config, %{socket_path: socket_path})
+    init_arg = {socket_path, transport, transport_config}
+    GenServer.start_link(__MODULE__, init_arg, Keyword.take(opts, [:name]))
   end
 
   @doc """
@@ -68,12 +70,12 @@ defmodule NixosTest.Machine.Shell do
   # Server callbacks
 
   @impl true
-  def init({socket_path, transport}) do
+  def init({socket_path, transport, transport_config}) do
     {:ok,
      %__MODULE__{
        socket_path: socket_path,
        transport: transport,
-       transport_config: %{socket_path: socket_path}
+       transport_config: transport_config
      }}
   end
 
