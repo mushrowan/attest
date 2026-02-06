@@ -153,7 +153,19 @@ defmodule NixosTest.Machine.Backend.QEMU do
   end
 
   @impl true
-  def send_key(_state, _key), do: {:error, :unsupported}
+  def send_key(%{qmp: nil}, _key), do: {:error, :unsupported}
+
+  def send_key(%{qmp: qmp}, key) do
+    keys =
+      key
+      |> String.split("-")
+      |> Enum.map(fn k -> %{"type" => "qcode", "data" => k} end)
+
+    case QMP.command(qmp, "send-key", %{"keys" => keys}) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
   @impl true
   def handle_port_exit(state, _code) do
@@ -161,7 +173,7 @@ defmodule NixosTest.Machine.Backend.QEMU do
   end
 
   @impl true
-  def capabilities(_state), do: [:screenshot]
+  def capabilities(_state), do: [:screenshot, :send_key]
 
   # private helpers
 

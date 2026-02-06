@@ -49,12 +49,24 @@ defmodule NixosTest.Machine.Backend.Mock do
   end
 
   @impl true
-  def send_key(_state, _key), do: {:error, :unsupported}
+  def send_key(%{qmp: nil}, _key), do: {:error, :unsupported}
+
+  def send_key(%{qmp: qmp}, key) do
+    keys =
+      key
+      |> String.split("-")
+      |> Enum.map(fn k -> %{"type" => "qcode", "data" => k} end)
+
+    case QMP.command(qmp, "send-key", %{"keys" => keys}) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
   @impl true
   def handle_port_exit(state, _code), do: state
 
   @impl true
-  def capabilities(%{qmp: qmp}) when not is_nil(qmp), do: [:screenshot]
+  def capabilities(%{qmp: qmp}) when not is_nil(qmp), do: [:screenshot, :send_key]
   def capabilities(_state), do: []
 end

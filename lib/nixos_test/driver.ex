@@ -141,8 +141,10 @@ defmodule NixosTest.Driver do
 
     # cleanup machines (some may already be stopped)
     for {_name, pid} <- state.machines do
-      if Process.alive?(pid) do
-        GenServer.stop(pid, :shutdown)
+      try do
+        if Process.alive?(pid), do: GenServer.stop(pid, :shutdown)
+      catch
+        :exit, _ -> :ok
       end
     end
 

@@ -291,6 +291,76 @@ defmodule NixosTest.MachineTest do
     end
   end
 
+  describe "send_key/2" do
+    test "sends key via QMP send-key command" do
+      socket_path = Path.join(System.tmp_dir!(), "qmp-key-#{:rand.uniform(10000)}.sock")
+      File.rm(socket_path)
+
+      {:ok, listen} =
+        :gen_tcp.listen(0, [
+          :binary,
+          {:packet, :line},
+          {:active, false},
+          {:ip, {:local, socket_path}}
+        ])
+
+      test_pid = self()
+
+      spawn(fn ->
+        {:ok, client} = :gen_tcp.accept(listen)
+
+        :ok =
+          :gen_tcp.send(
+            client,
+            ~s({"QMP": {"version": {"qemu": {"major": 8}}, "capabilities": []}}\n)
+          )
+
+        {:ok, _} = :gen_tcp.recv(client, 0, 5000)
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        # receive the send-key command
+        {:ok, cmd} = :gen_tcp.recv(client, 0, 5000)
+        send(test_pid, {:qmp_command, cmd})
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        receive do
+          :stop -> :ok
+        end
+      end)
+
+      {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+
+      {:ok, machine} =
+        Machine.start_link(name: "sendkey-test", backend: Backend.Mock, qmp: qmp)
+
+      :ok = Machine.start(machine)
+
+      assert :ok = Machine.send_key(machine, "ctrl-alt-delete")
+
+      assert_receive {:qmp_command, cmd}, 1000
+      assert cmd =~ "send-key"
+      assert cmd =~ "ctrl"
+      assert cmd =~ "alt"
+      assert cmd =~ "delete"
+
+      GenServer.stop(machine)
+      GenServer.stop(qmp)
+      :gen_tcp.close(listen)
+      File.rm(socket_path)
+    end
+
+    test "returns error when backend has no send_key support" do
+      {:ok, machine} =
+        Machine.start_link(name: "sendkey-err-test", backend: Backend.Mock)
+
+      :ok = Machine.start(machine)
+
+      assert {:error, :unsupported} = Machine.send_key(machine, "ret")
+      assert Process.alive?(machine)
+      GenServer.stop(machine)
+    end
+  end
+
   describe "stop/1" do
     test "sends halt via backend" do
       socket_path = Path.join(System.tmp_dir!(), "qmp-stop-#{:rand.uniform(10000)}.sock")

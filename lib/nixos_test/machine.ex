@@ -166,6 +166,14 @@ defmodule NixosTest.Machine do
     GenServer.call(machine, {:screenshot, filename})
   end
 
+  @doc """
+  Send a key combination to the VM (e.g. "ctrl-alt-delete", "ret")
+  """
+  @spec send_key(GenServer.server(), String.t()) :: :ok | {:error, term()}
+  def send_key(machine, key) do
+    GenServer.call(machine, {:send_key, key})
+  end
+
   # server callbacks
 
   @impl true
@@ -276,6 +284,13 @@ defmodule NixosTest.Machine do
   def handle_call({:screenshot, filename}, _from, state) do
     Logger.info("taking screenshot: #{filename}")
     result = state.backend_mod.screenshot(state.backend_state, filename)
+    {:reply, result, state}
+  end
+
+  @impl true
+  def handle_call({:send_key, key}, _from, state) do
+    Logger.info("sending key #{key} to #{state.name}")
+    result = state.backend_mod.send_key(state.backend_state, key)
     {:reply, result, state}
   end
 
