@@ -19,6 +19,9 @@ pkgs.mkShell {
     # for mix deps
     pkgs.git
 
+    # VDE for inter-VM networking (VLANs)
+    pkgs.vde2
+
     # useful tools
     pkgs.jq
     pkgs.curl

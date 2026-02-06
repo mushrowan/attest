@@ -72,6 +72,7 @@
               src = ./.;
               inherit elixir;
               mixFodDeps = mixFodDepsAll;
+              nativeBuildInputs = [ pkgs.vde2 ];
 
               buildPhase = ''
                 runHook preBuild
