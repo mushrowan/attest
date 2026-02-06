@@ -42,17 +42,16 @@ Machine GenServer (public API)
 ├── execute, wait_for_unit, wait_for_open_port (shell-based)
 ├── start, shutdown, halt, screenshot (delegated to backend)
 └── delegates to Backend behaviour
-    ├── Backend.QEMU      — Port.open, QMP, virtconsole shell
-    ├── Backend.Mock      — injected pids for unit tests
+    ├── Backend.QEMU        — Port.open, QMP, virtconsole shell
+    ├── Backend.Firecracker — REST API, vsock shell, TAP networking
+    ├── Backend.Mock        — injected pids for unit tests
     └── (future)
-        ├── Backend.Firecracker   — REST API, vsock shell
         └── Backend.CloudHypervisor — REST API, virtconsole
 
 Shell GenServer (command protocol)
 └── delegates connection to Transport behaviour
     ├── Transport.VirtConsole — listen/accept on unix socket
-    └── (future)
-        └── Transport.Vsock   — firecracker vsock
+    └── Transport.Vsock       — firecracker vsock CONNECT protocol
 ```
 
 ## file structure
@@ -64,16 +63,20 @@ lib/nixos_test/
 ├── driver.ex                        # test coordinator GenServer
 ├── machine.ex                       # VM GenServer, delegates to backend
 └── machine/
-    ├── backend.ex                   # @behaviour
+    ├── backend.ex                   # @behaviour (14 callbacks)
     ├── backend/
     │   ├── qemu.ex                  # QEMU: Port.open, QMP, shell
+    │   ├── firecracker.ex           # Firecracker: REST API, vsock
+    │   ├── firecracker/
+    │   │   └── api.ex               # HTTP/1.1 client over UDS
     │   └── mock.ex                  # unit test mock
     ├── qmp.ex                       # QMP protocol client GenServer
     ├── shell.ex                     # command protocol GenServer
     └── shell/
         ├── transport.ex             # @behaviour
         └── transport/
-            └── virtconsole.ex       # unix socket listen/accept
+            ├── virtconsole.ex       # unix socket listen/accept
+            └── vsock.ex             # firecracker vsock CONNECT
 ```
 
 ## module details
@@ -115,6 +118,18 @@ extracts all QEMU-specific code from the old machine.ex:
 - connects QMP with retry logic
 - halt sends QMP `quit`, shutdown sends `poweroff` via shell
 
+### Backend.Firecracker
+
+manages firecracker microVM lifecycle:
+- spawns firecracker process, configures via REST API over UDS
+- boots VM with `PUT /actions {"action_type": "InstanceStart"}`
+- shell connected via vsock transport (CONNECT protocol)
+- halt sends `SendCtrlAltDel` action, falls back to SIGTERM
+- block/unblock via host-side `ip link set <tap> down/up`
+- no VGA/QMP/SLIRP: screenshot, send_key, forward_port unsupported
+
+uses `Firecracker.API` for HTTP/1.1 over UDS (hand-rolled, no deps).
+
 ### Backend.Mock
 
 wraps injected QMP and Shell pids for unit testing. all lifecycle
@@ -137,6 +152,12 @@ listens on a unix socket, accepts guest connection, waits for
 "Spawning backdoor root shell..." ready message. used by QEMU
 and cloud-hypervisor backends.
 
+### Transport.Vsock
+
+connects to firecracker's vsock UDS, sends `CONNECT <port>\n`,
+reads `OK <port>\n`, then waits for the shell backdoor ready message.
+the resulting socket is in line mode, ready for the shell protocol.
+
 ### QMP (GenServer)
 
 QEMU Machine Protocol client. JSON over unix socket. handles
@@ -151,9 +172,9 @@ lookup. handles global timeout.
 
 ## future work
 
-- `Backend.Firecracker` — REST API, vsock shell, snapshot/restore
-- `Transport.Vsock` — firecracker vsock UDS + CONNECT protocol
-- `Network` behaviour — bridge-based networking (replaces VDE)
-- snapshot/restore for "boot once, fork many" test execution
+- snapshot/restore for "boot once, fork many" test execution (~50-150ms restore)
+- `Network` behaviour — TAP + bridge networking for multi-VM tests
+- `Backend.CloudHypervisor` — REST API, virtconsole shell
 - in-guest screenshots via xvfb + imagemagick (non-QEMU backends)
-- test DSL / nix integration
+- firecracker nix integration (vmlinux + ext4 rootfs + vsock backdoor service)
+- test DSL / nix module for declarative test definitions

@@ -1,5 +1,31 @@
 # progress log
 
+## 2026-02-06: Backend.Firecracker (done)
+
+### transport
+- `Transport.Vsock` — CONNECT protocol over firecracker's vsock UDS
+- waits for backdoor ready message like VirtConsole
+- Shell updated to accept custom `transport_config`
+
+### REST API client
+- `Firecracker.API` — hand-rolled HTTP/1.1 over UDS, no external deps
+- `put/3`, `patch/3`, `get/2` with JSON encode/decode
+
+### backend
+- `Backend.Firecracker` — full Backend behaviour implementation
+- spawns firecracker, configures via API (logger, machine-config, boot-source,
+  drives, vsock, network interfaces), boots, connects shell via vsock
+- shutdown via poweroff, halt via SendCtrlAltDel + force kill
+- block/unblock via host `ip link set` on TAP interfaces
+- unsupported: screenshot, send_key, forward_port, send_console
+
+### also
+- `send_console/2` — writes to QEMU stdin (serial console)
+
+118 tests passing, `nix flake check` green.
+
+---
+
 ## 2026-02-06: tty text, convenience wrappers, copy_from_vm (done)
 
 - `get_tty_text/2` — read `/dev/vcs<N>` virtual terminal content
