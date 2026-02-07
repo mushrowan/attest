@@ -1,7 +1,7 @@
 # create a NixOS integration test using the elixir driver
 #
-# builds VMs from NixOS module configs, wraps the driver with
-# start scripts, and produces a derivation that runs the test
+# builds VMs from NixOS module configs, generates a backend-agnostic
+# JSON machine config, and produces a derivation that runs the test
 #
 # usage:
 #   test = import ./make-test.nix {
@@ -36,8 +36,8 @@
 let
   inherit (pkgs) lib;
 
-  # build a VM from a NixOS module configuration
-  buildVM =
+  # evaluate a NixOS config, returning both the full config and the VM drv
+  evalNode =
     nodeName: nodeConfig:
     let
       modules = if builtins.isList nodeConfig then nodeConfig else [ nodeConfig ];
@@ -67,10 +67,30 @@ let
         };
       };
     in
-    nixos.config.system.build.vm;
+    {
+      config = nixos.config;
+      vm = nixos.config.system.build.vm;
+    };
 
-  # build all VMs
-  vms = lib.mapAttrs buildVM nodes;
+  # evaluate all nodes
+  evaluatedNodes = lib.mapAttrs evalNode nodes;
+
+  # extract just the VM derivations (for passthru)
+  vms = lib.mapAttrs (_: node: node.vm) evaluatedNodes;
+
+  # build machine config list from evaluated NixOS configs
+  # binary name is run-${config.system.name}-vm (set by qemu-vm.nix)
+  machines = lib.mapAttrsToList (
+    nodeName: node:
+    let
+      systemName = node.config.system.name;
+    in
+    {
+      name = nodeName;
+      backend = "qemu";
+      start_command = "${node.vm}/bin/run-${systemName}-vm";
+    }
+  ) evaluatedNodes;
 
   driver = import ./driver.nix {
     inherit
@@ -80,8 +100,8 @@ let
       globalTimeout
       extraDriverArgs
       name
+      machines
       ;
-    nodes = vms;
     inherit testScript;
   };
 

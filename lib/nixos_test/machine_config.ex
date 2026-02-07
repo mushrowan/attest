@@ -63,10 +63,13 @@ defmodule NixosTest.MachineConfig do
   end
 
   defp parse_machine(%{"backend" => "qemu"} = m, state_dir) do
+    name = Map.fetch!(m, "name")
     script = Map.fetch!(m, "start_command")
 
+    # pass name explicitly — the script path uses config.system.name
+    # (hostname) which may differ from the node key that test scripts use
     script
-    |> StartCommand.build(state_dir: state_dir)
+    |> StartCommand.build(state_dir: state_dir, name: name)
     |> StartCommand.to_machine_config()
   end
 

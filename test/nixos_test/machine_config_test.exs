@@ -32,6 +32,31 @@ defmodule NixosTest.MachineConfigTest do
       assert machine.shell_socket_path =~ "/tmp/state"
     end
 
+    test "QEMU name from JSON overrides script-derived name" do
+      # node key is "web" but script has hostname "webserver"
+      json =
+        Jason.encode!(%{
+          "machines" => [
+            %{
+              "name" => "web",
+              "backend" => "qemu",
+              "start_command" => "/nix/store/abc/bin/run-webserver-vm"
+            }
+          ]
+        })
+
+      path = write_tmp_json(json)
+      config = MachineConfig.parse_file(path, state_dir: "/tmp/state")
+
+      [machine] = config.machines
+      # name should be the JSON name, not derived from script
+      assert machine.name == "web"
+      # state dir should use the JSON name
+      assert machine.state_dir =~ "vm-state-web"
+      # but the start command should still reference the original script
+      assert machine.start_command =~ "run-webserver-vm"
+    end
+
     test "parses firecracker machine config from JSON" do
       json =
         Jason.encode!(%{

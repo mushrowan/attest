@@ -46,11 +46,12 @@ defmodule NixosTest.StartCommand do
   ## Options
 
   - `:state_dir` (required) — base directory for VM state
+  - `:name` — override machine name (default: extracted from script path)
   - `:allow_reboot` — if true, omits `-no-reboot` (default: false)
   """
   @spec build(String.t(), keyword()) :: t()
   def build(script_path, opts) do
-    machine_name = name(script_path)
+    machine_name = Keyword.get(opts, :name) || name(script_path)
     base_state_dir = Keyword.fetch!(opts, :state_dir)
     allow_reboot = Keyword.get(opts, :allow_reboot, false)
 

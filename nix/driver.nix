@@ -1,13 +1,17 @@
-# wrap the elixir escript with VM start scripts, test script, and vlans
+# wrap the elixir escript with a JSON machine config, test script, and vlans
 #
-# mirrors what the python driver.nix does: collects start scripts from
-# nodes, writes the test script to $out, wraps the binary with env vars
+# generates a backend-agnostic JSON machine config file that the driver
+# reads via --machine-config (or machineConfig env var). supports both
+# QEMU and Firecracker backends
 #
 # usage:
 #   driver = import ./driver.nix {
 #     inherit pkgs;
 #     nixos-test-ng = self'.packages.nixos-test;
-#     nodes = { server = serverVM; client = clientVM; };
+#     machines = [
+#       { name = "server"; backend = "qemu"; start_command = "${serverVM}/bin/run-server-vm"; }
+#       { name = "client"; backend = "qemu"; start_command = "${clientVM}/bin/run-client-vm"; }
+#     ];
 #     testScript = ''
 #       start_all.()
 #       server |> NixosTest.wait_for_unit("nginx.service")
@@ -17,8 +21,8 @@
 {
   pkgs,
   nixos-test-ng,
-  # attrset of node name -> NixOS system.build.vm derivation
-  nodes,
+  # list of machine config attrsets (see MachineConfig for schema)
+  machines,
   # elixir test script string
   testScript,
   # list of VLAN numbers
@@ -33,43 +37,40 @@
 let
   inherit (pkgs) lib;
 
-  # collect start scripts from VMs: /nix/store/.../bin/run-<name>-vm
-  vmStartScripts = lib.concatStringsSep " " (
-    lib.mapAttrsToList (_name: vm: "${vm}/bin/run-*-vm") nodes
-  );
+  # build the JSON machine config
+  machineConfigJson = builtins.toJSON {
+    inherit vlans;
+    global_timeout = globalTimeout;
+    inherit machines;
+  };
 
-  vlansStr = lib.concatStringsSep " " (map toString vlans);
+  machineConfigFile = pkgs.writeText "machine-config-${name}.json" machineConfigJson;
 in
 pkgs.runCommand "nixos-test-driver-${name}"
   {
     nativeBuildInputs = [ pkgs.makeWrapper ];
     passthru = {
-      inherit nodes;
+      inherit machines;
     };
     meta.mainProgram = "nixos-test-driver";
   }
   ''
-        mkdir -p $out/bin
+    mkdir -p $out/bin
 
-        # resolve start script globs
-        vmStartScripts=($(for i in ${vmStartScripts}; do echo $i; done))
-
-        # write test script
-        cat > $out/test-script.exs <<'ELIXIR_SCRIPT'
+    # write test script
+    cat > $out/test-script.exs <<'ELIXIR_SCRIPT'
     ${testScript}
     ELIXIR_SCRIPT
 
-        # create wrapper
-        makeWrapper ${nixos-test-ng}/bin/nixos-test $out/bin/nixos-test-driver \
-          --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.vde2 ]} \
-          --set startScripts "''${vmStartScripts[*]}" \
-          --set testScript "$out/test-script.exs" \
-          --set globalTimeout "${toString globalTimeout}" \
-          --set vlans '${vlansStr}' \
-          ${lib.escapeShellArgs (
-            lib.concatMap (arg: [
-              "--add-flags"
-              arg
-            ]) extraDriverArgs
-          )}
+    # create wrapper with JSON machine config
+    makeWrapper ${nixos-test-ng}/bin/nixos-test $out/bin/nixos-test-driver \
+      --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.vde2 ]} \
+      --set machineConfig "${machineConfigFile}" \
+      --set testScript "$out/test-script.exs" \
+      ${lib.escapeShellArgs (
+        lib.concatMap (arg: [
+          "--add-flags"
+          arg
+        ]) extraDriverArgs
+      )}
   ''
