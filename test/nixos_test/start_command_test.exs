@@ -66,14 +66,14 @@ defmodule NixosTest.StartCommandTest do
       assert result.start_command =~ "-device virtconsole,chardev=shell"
     end
 
-    test "start_command appends serial stdio" do
+    test "start_command appends -nographic" do
       result =
         StartCommand.build(
           "/nix/store/abc/bin/run-mynode-vm",
           state_dir: "/tmp/s"
         )
 
-      assert result.start_command =~ "-serial stdio"
+      assert result.start_command =~ "-nographic"
     end
 
     test "start_command includes -no-reboot by default" do
@@ -104,7 +104,7 @@ defmodule NixosTest.StartCommandTest do
           state_dir: "/tmp/s"
         )
 
-      assert result.start_command =~ "TMPDIR=/tmp/s/vm-state-mynode"
+      assert result.start_command =~ "env TMPDIR=/tmp/s/vm-state-mynode"
       assert result.start_command =~ "USE_TMPDIR=1"
     end
 

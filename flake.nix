@@ -103,6 +103,24 @@
               integration = integrationTests.basic;
               # multi-vm integration test (two VMs via Driver)
               integration-multi-vm = integrationTests.multi-vm;
+              # make-test smoke test (nix wrapper end-to-end)
+              make-test-smoke = import ./nix/make-test.nix {
+                inherit pkgs;
+                nixos-test-ng = nixos-test;
+                name = "smoke";
+                nodes = {
+                  machine = { };
+                };
+                testScript = ''
+                  start_all.()
+                  NixosTest.wait_for_unit(machine, "multi-user.target")
+                  output = NixosTest.succeed(machine, "echo hello-from-make-test")
+
+                  unless String.contains?(output, "hello-from-make-test") do
+                    raise "unexpected output: #{inspect(output)}"
+                  end
+                '';
+              };
             }
           );
 

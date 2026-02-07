@@ -40,7 +40,7 @@ defmodule NixosTest.Machine.Backend.QEMU do
 
   @impl true
   def start(state) do
-    # create shell listener FIRST (before QEMU starts, so it can connect)
+    # create shell process (doesn't create socket yet)
     {shell_pid, state} =
       if state.shell_socket_path do
         {:ok, shell} = Shell.start_link(socket_path: state.shell_socket_path)
@@ -48,6 +48,20 @@ defmodule NixosTest.Machine.Backend.QEMU do
       else
         {nil, state}
       end
+
+    # start shell listener in a task BEFORE spawning QEMU
+    # this creates the unix socket that QEMU's chardev connects to
+    shell_task =
+      if shell_pid do
+        Logger.info("waiting for shell connection on #{state.name}")
+
+        Task.async(fn ->
+          Shell.wait_for_connection(shell_pid, 120_000)
+        end)
+      end
+
+    # give the listener a moment to bind the socket
+    if shell_task, do: Process.sleep(100)
 
     # spawn QEMU process if start_command provided
     state =
@@ -62,10 +76,9 @@ defmodule NixosTest.Machine.Backend.QEMU do
         state
       end
 
-    # wait for shell connection if we created a listener
-    if shell_pid do
-      Logger.info("waiting for shell connection on #{state.name}")
-      :ok = Shell.wait_for_connection(shell_pid, 120_000)
+    # wait for shell connection to complete
+    if shell_task do
+      :ok = Task.await(shell_task, 120_000)
     end
 
     # connect to QMP socket if path provided

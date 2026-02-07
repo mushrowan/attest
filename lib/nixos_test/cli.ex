@@ -111,7 +111,12 @@ defmodule NixosTest.CLI do
   end
 
   defp run_test(opts) do
-    state_dir = opts.output_dir || System.tmp_dir!()
+    # VM state (sockets, disk images) goes in a writable temp dir
+    # output_dir (-o) is for screenshots and test artifacts only
+    tmp_dir = System.tmp_dir!()
+    state_dir = Path.join(tmp_dir, "vm-state-#{:rand.uniform(1_000_000)}")
+    File.mkdir_p!(state_dir)
+    out_dir = opts.output_dir || state_dir
 
     # build machine configs from start scripts
     machine_configs =
@@ -132,7 +137,7 @@ defmodule NixosTest.CLI do
         machines: machine_configs,
         vlans: opts.vlans,
         global_timeout: opts.global_timeout,
-        out_dir: state_dir,
+        out_dir: out_dir,
         tmp_dir: state_dir
       )
 

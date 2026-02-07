@@ -65,12 +65,14 @@ defmodule NixosTest.StartCommand do
         "-chardev socket,id=shell,path=#{shell_socket}",
         "-device virtio-serial",
         "-device virtconsole,chardev=shell",
-        "-serial stdio"
+        "-nographic"
       ]
       |> maybe_add_no_reboot(allow_reboot)
 
+    disk_image = Path.join(state_dir, "#{machine_name}.qcow2")
+
     env_prefix =
-      "TMPDIR=#{state_dir} USE_TMPDIR=1 SHARED_DIR=#{shared_dir}"
+      "env TMPDIR=#{state_dir} USE_TMPDIR=1 SHARED_DIR=#{shared_dir} NIX_DISK_IMAGE=#{disk_image}"
 
     command =
       "#{env_prefix} #{script_path} #{Enum.join(runtime_args, " ")}"
