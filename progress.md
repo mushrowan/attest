@@ -1,5 +1,19 @@
 # progress log
 
+## 2026-02-07: VLan / inter-VM networking (done)
+
+- `NixosTest.VLan` GenServer — manages `vde_switch` processes in hub mode
+- `qemu_nic_mac/2` — deterministic MAC: `52:54:00:12:XX:YY`
+- `qemu_nic_flags/3` — generates `-device virtio-net-pci` + `-netdev vde` QEMU args
+- sets `QEMU_VDE_SOCKET_N` env vars for NixOS-generated QEMU start scripts
+- `Driver` creates VLANs before VMs, deduplicates, tears down on terminate
+- `Driver.get_vlans/1` — returns `[{nr, socket_dir}]`
+- added `vde2` to devshell and nix test deps
+
+132 tests passing, `nix flake check` green.
+
+---
+
 ## 2026-02-06: snapshot create/restore (done)
 
 - `Backend.snapshot_create/2`, `Backend.snapshot_load/2`, `Backend.restore_from_snapshot/2` callbacks
