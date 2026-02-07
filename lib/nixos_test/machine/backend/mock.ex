@@ -10,14 +10,15 @@ defmodule NixosTest.Machine.Backend.Mock do
 
   alias NixosTest.Machine.QMP
 
-  defstruct [:qmp, :shell]
+  defstruct [:qmp, :shell, :notify]
 
   @impl true
   def init(config) do
     {:ok,
      %__MODULE__{
        qmp: Map.get(config, :qmp),
-       shell: Map.get(config, :shell)
+       shell: Map.get(config, :shell),
+       notify: Map.get(config, :notify)
      }}
   end
 
@@ -27,7 +28,10 @@ defmodule NixosTest.Machine.Backend.Mock do
   end
 
   @impl true
-  def shutdown(_state, _timeout), do: :ok
+  def shutdown(state, _timeout) do
+    if state.notify, do: send(state.notify, {:mock_shutdown, self()})
+    :ok
+  end
 
   @impl true
   def halt(_state, _timeout), do: :ok

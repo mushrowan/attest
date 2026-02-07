@@ -113,6 +113,23 @@ defmodule NixosTest.DriverTest do
       GenServer.stop(driver)
     end
 
+    test "driver shuts down booted machines gracefully on terminate" do
+      {:ok, driver} =
+        Driver.start_link(
+          machines: [
+            %{name: "graceful1", backend: Backend.Mock, notify: self()},
+            %{name: "graceful2", backend: Backend.Mock, notify: self()}
+          ]
+        )
+
+      :ok = Driver.start_all(driver)
+
+      GenServer.stop(driver)
+
+      assert_receive {:mock_shutdown, _}, 5000
+      assert_receive {:mock_shutdown, _}, 5000
+    end
+
     test "machines are stopped when driver terminates" do
       {:ok, driver} =
         Driver.start_link(

@@ -175,9 +175,9 @@ defmodule NixosTest.Driver do
       Process.cancel_timer(state.timeout_ref)
     end
 
-    # cleanup machines (some may already be stopped)
-    for {_name, pid} <- state.machines || %{} do
-      safe_stop(pid)
+    # gracefully shut down booted machines, then stop processes
+    for {name, pid} <- state.machines || %{} do
+      safe_shutdown(name, pid)
     end
 
     # cleanup VLANs
@@ -186,6 +186,19 @@ defmodule NixosTest.Driver do
     end
 
     :ok
+  end
+
+  defp safe_shutdown(name, pid) do
+    if Process.alive?(pid) do
+      if NixosTest.Machine.booted?(pid) do
+        Logger.info("shutting down machine #{name}")
+        NixosTest.Machine.shutdown(pid, 30_000)
+      end
+
+      GenServer.stop(pid, :normal)
+    end
+  catch
+    :exit, _ -> :ok
   end
 
   defp safe_stop(pid) do
