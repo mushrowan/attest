@@ -2,35 +2,25 @@
 
 ## status
 
-167 tests, `nix flake check` green
+173 tests, `nix flake check` green
 
 ### what's built
 - Machine GenServer with Backend behaviour (14 callbacks)
 - Backend.QEMU, Backend.Firecracker, Backend.Mock
 - Shell GenServer with Transport behaviour (VirtConsole, Vsock)
 - QMP GenServer with greeting/negotiation, async event filtering
-- Driver GenServer — start_all, get_machine, global timeout, VLan lifecycle
-- full machine ops: execute, wait_for_unit, wait_for_open_port, shutdown, reboot, screenshot, send_key, send_chars, send_console, block/unblock, forward_port, copy_from_vm, copy_from_host_via_shell, snapshots (firecracker), get_tty_text, get_console_log, systemctl, get_unit_info, get_unit_property, wait_until_succeeds/fails, wait_for_file, wait_for_console_text, wait_until_tty_matches, wait_for_closed_port, wait_for_open_unix_socket, start_job, stop_job, crash
+- Driver GenServer — start_all, get_machine, global timeout, VLan lifecycle, graceful shutdown
+- full machine ops: execute, succeed, fail, sleep, wait_for_unit, wait_for_open_port, shutdown, reboot, screenshot, send_key, send_chars, send_console, block/unblock, forward_port, copy_from_vm, copy_from_host_via_shell, snapshots (firecracker), get_tty_text, get_console_log, systemctl, get_unit_info, get_unit_property, wait_until_succeeds/fails, wait_for_file, wait_for_console_text, wait_until_tty_matches, wait_for_closed_port, wait_for_open_unix_socket, start_job, stop_job, crash
 - nix integration: StartCommand, CLI, TestScript, make-test.nix, driver.nix, run.nix
 - VLan — VDE switch management, deterministic MACs, QEMU NIC flags
-- smoke test (single VM) passing in `nix flake check`
+- smoke tests: single-VM and multi-node (server + client) passing in `nix flake check`
+- driver.nix includes vde2 in PATH for VLan support
 
 ## next
 
-### multi-node smoke test
-- current smoke test only uses one VM
-- add a two-node test through make-test.nix with VLANs
-- validates the full multi-VM pipeline end-to-end
-
-### graceful driver shutdown
-- `CLI.run_test` calls `GenServer.stop(driver)` but doesn't shut down VMs
-- Driver.terminate should call Machine.shutdown on all machines
-
 ### missing machine methods
-- `sleep/2` — simple timer
 - `user` param on systemctl/start_job/stop_job
 - OCR / screenshot text extraction
-- `succeed/2`, `fail/2` — execute with assertion on exit code
 
 ### firecracker nix integration
 - vmlinux kernel extraction from NixOS config
