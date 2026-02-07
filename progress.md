@@ -1,5 +1,29 @@
 # progress log
 
+## 2026-02-07: nix integration layer — CLI, StartCommand, TestScript (done)
+
+### StartCommand
+- `StartCommand.name/1` — extracts machine name from `run-<name>-vm` paths
+- `StartCommand.build/2` — builds full QEMU command with runtime args (QMP socket, virtconsole chardev, serial stdio, env vars TMPDIR/USE_TMPDIR/SHARED_DIR)
+- `StartCommand.to_machine_config/1` — converts to Driver-compatible machine config map
+- supports `allow_reboot` option (omits `-no-reboot`)
+
+### CLI rewrite
+- `CLI.parse_args/1` now public, returns structured map
+- accepts `--start-scripts`, `--vlans`, `--test-script`, `--global-timeout`, `--output-dir`, `--keep-vm-state`, `--interactive`
+- env var fallbacks (`startScripts`, `vlans`, `testScript`, `globalTimeout`) for nix wrapProgram
+- `eval`/`eval-file` subcommands kept for backwards compat with integration tests
+- `main/1` orchestrates: parse args → build machine configs → start Driver → run test script
+
+### TestScript
+- `TestScript.eval_string/2` — evals elixir code with bindings: each machine name as a variable, plus `driver` and `start_all`
+- `TestScript.eval_file/2` — reads file then eval_string
+- mirrors python driver's `exec(test_script, symbols)` approach
+
+167 tests passing, `nix flake check` green.
+
+---
+
 ## 2026-02-07: VLan / inter-VM networking (done)
 
 - `NixosTest.VLan` GenServer — manages `vde_switch` processes in hub mode
