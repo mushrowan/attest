@@ -130,11 +130,11 @@ defmodule NixosTest do
   end
 
   @doc """
-  Run a systemctl command.
+  Run a systemctl command. Pass `user: "username"` for user units.
   """
-  @spec systemctl(GenServer.server(), String.t()) :: Machine.execute_result()
-  def systemctl(machine, args) do
-    Machine.systemctl(machine, args)
+  @spec systemctl(GenServer.server(), String.t(), keyword()) :: Machine.execute_result()
+  def systemctl(machine, args, opts \\ []) do
+    Machine.systemctl(machine, args, opts)
   end
 
   @doc """
@@ -263,19 +263,19 @@ defmodule NixosTest do
   end
 
   @doc """
-  Start a systemd unit.
+  Start a systemd unit. Pass `user: "username"` for user units.
   """
-  @spec start_job(GenServer.server(), String.t()) :: Machine.execute_result()
-  def start_job(machine, unit) do
-    Machine.start_job(machine, unit)
+  @spec start_job(GenServer.server(), String.t(), keyword()) :: Machine.execute_result()
+  def start_job(machine, unit, opts \\ []) do
+    Machine.start_job(machine, unit, opts)
   end
 
   @doc """
-  Stop a systemd unit.
+  Stop a systemd unit. Pass `user: "username"` for user units.
   """
-  @spec stop_job(GenServer.server(), String.t()) :: Machine.execute_result()
-  def stop_job(machine, unit) do
-    Machine.stop_job(machine, unit)
+  @spec stop_job(GenServer.server(), String.t(), keyword()) :: Machine.execute_result()
+  def stop_job(machine, unit, opts \\ []) do
+    Machine.stop_job(machine, unit, opts)
   end
 
   @doc """

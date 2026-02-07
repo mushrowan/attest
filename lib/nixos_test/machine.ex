@@ -218,10 +218,25 @@ defmodule NixosTest.Machine do
 
   @doc """
   Run a systemctl command and return {exit_code, output}
+
+  Pass `user: "username"` to run as a user systemd instance.
   """
-  @spec systemctl(GenServer.server(), String.t()) :: execute_result()
-  def systemctl(machine, args) do
-    execute(machine, "systemctl #{args}")
+  @spec systemctl(GenServer.server(), String.t(), keyword()) :: execute_result()
+  def systemctl(machine, args, opts \\ []) do
+    case Keyword.get(opts, :user) do
+      nil ->
+        execute(machine, "systemctl #{args}")
+
+      user ->
+        escaped = String.replace(args, "'", "\\'")
+
+        execute(
+          machine,
+          "su -l #{user} --shell /bin/sh -c " <>
+            "'XDG_RUNTIME_DIR=/run/user/`id -u #{user}` " <>
+            "systemctl --user #{escaped}'"
+        )
+    end
   end
 
   @doc """
@@ -315,18 +330,22 @@ defmodule NixosTest.Machine do
 
   @doc """
   Start a systemd unit
+
+  Pass `user: "username"` to start a user unit.
   """
-  @spec start_job(GenServer.server(), String.t()) :: execute_result()
-  def start_job(machine, unit) do
-    execute(machine, "systemctl start #{unit}")
+  @spec start_job(GenServer.server(), String.t(), keyword()) :: execute_result()
+  def start_job(machine, unit, opts \\ []) do
+    systemctl(machine, "start #{unit}", opts)
   end
 
   @doc """
   Stop a systemd unit
+
+  Pass `user: "username"` to stop a user unit.
   """
-  @spec stop_job(GenServer.server(), String.t()) :: execute_result()
-  def stop_job(machine, unit) do
-    execute(machine, "systemctl stop #{unit}")
+  @spec stop_job(GenServer.server(), String.t(), keyword()) :: execute_result()
+  def stop_job(machine, unit, opts \\ []) do
+    systemctl(machine, "stop #{unit}", opts)
   end
 
   @doc """

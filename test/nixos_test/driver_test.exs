@@ -126,8 +126,9 @@ defmodule NixosTest.DriverTest do
 
       GenServer.stop(driver)
 
-      assert_receive {:mock_shutdown, _}, 5000
-      assert_receive {:mock_shutdown, _}, 5000
+      # collect shutdown notifications (may arrive interleaved with EXIT messages)
+      shutdowns = collect_shutdown_messages(2, 5000)
+      assert length(shutdowns) == 2
     end
 
     test "machines are stopped when driver terminates" do
@@ -152,6 +153,28 @@ defmodule NixosTest.DriverTest do
 
       assert_receive {:DOWN, ^ref1, :process, ^m1, _}, 5000
       assert_receive {:DOWN, ^ref2, :process, ^m2, _}, 5000
+    end
+  end
+
+  defp collect_shutdown_messages(count, timeout) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    do_collect_shutdowns(count, deadline, [])
+  end
+
+  defp do_collect_shutdowns(0, _deadline, acc), do: acc
+
+  defp do_collect_shutdowns(remaining, deadline, acc) do
+    time_left = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    receive do
+      {:mock_shutdown, pid} ->
+        do_collect_shutdowns(remaining - 1, deadline, [pid | acc])
+
+      {:EXIT, _, _} ->
+        # ignore EXIT messages from linked driver
+        do_collect_shutdowns(remaining, deadline, acc)
+    after
+      time_left -> acc
     end
   end
 end
