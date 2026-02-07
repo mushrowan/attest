@@ -98,6 +98,9 @@ defmodule NixosTest.VLan do
     # wait for socket dir to appear
     wait_for_socket_dir(socket_dir, 5_000)
 
+    # set env var for QEMU start scripts (matches Python driver)
+    System.put_env("QEMU_VDE_SOCKET_#{nr}", socket_dir)
+
     state = %__MODULE__{
       nr: nr,
       socket_dir: socket_dir,

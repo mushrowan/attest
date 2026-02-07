@@ -40,6 +40,20 @@ defmodule NixosTest.VLanTest do
       File.rm_rf!(tmp)
     end
 
+    test "sets QEMU_VDE_SOCKET_N env var" do
+      tmp = Path.join(System.tmp_dir!(), "vlan-env-#{:rand.uniform(100_000)}")
+      File.mkdir_p!(tmp)
+
+      {:ok, vlan} = VLan.start_link(nr: 3, tmp_dir: tmp)
+      socket_dir = VLan.socket_dir(vlan)
+
+      assert System.get_env("QEMU_VDE_SOCKET_3") == socket_dir
+
+      GenServer.stop(vlan)
+      System.delete_env("QEMU_VDE_SOCKET_3")
+      File.rm_rf!(tmp)
+    end
+
     test "multiple VLANs can coexist" do
       tmp = Path.join(System.tmp_dir!(), "vlan-multi-#{:rand.uniform(100_000)}")
       File.mkdir_p!(tmp)
