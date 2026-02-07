@@ -1,148 +1,67 @@
-# progress log
+# nixos-test-ng
 
-## 2026-02-07: nix integration layer — CLI, StartCommand, TestScript (done)
+## status
 
-### StartCommand
-- `StartCommand.name/1` — extracts machine name from `run-<name>-vm` paths
-- `StartCommand.build/2` — builds full QEMU command with runtime args (QMP socket, virtconsole chardev, serial stdio, env vars TMPDIR/USE_TMPDIR/SHARED_DIR)
-- `StartCommand.to_machine_config/1` — converts to Driver-compatible machine config map
-- supports `allow_reboot` option (omits `-no-reboot`)
+167 tests, `nix flake check` green
 
-### CLI rewrite
-- `CLI.parse_args/1` now public, returns structured map
-- accepts `--start-scripts`, `--vlans`, `--test-script`, `--global-timeout`, `--output-dir`, `--keep-vm-state`, `--interactive`
-- env var fallbacks (`startScripts`, `vlans`, `testScript`, `globalTimeout`) for nix wrapProgram
-- `eval`/`eval-file` subcommands kept for backwards compat with integration tests
-- `main/1` orchestrates: parse args → build machine configs → start Driver → run test script
+### what's built
+- Machine GenServer with Backend behaviour (14 callbacks)
+- Backend.QEMU, Backend.Firecracker, Backend.Mock
+- Shell GenServer with Transport behaviour (VirtConsole, Vsock)
+- QMP GenServer with greeting/negotiation, async event filtering
+- Driver GenServer — start_all, get_machine, global timeout, VLan lifecycle
+- full machine ops: execute, wait_for_unit, wait_for_open_port, shutdown, reboot, screenshot, send_key, send_chars, send_console, block/unblock, forward_port, copy_from_vm, copy_from_host_via_shell, snapshots (firecracker), get_tty_text, get_console_log, systemctl, get_unit_info, get_unit_property, wait_until_succeeds/fails, wait_for_file, wait_for_console_text, wait_until_tty_matches, wait_for_closed_port, wait_for_open_unix_socket, start_job, stop_job, crash
+- nix integration: StartCommand, CLI, TestScript, make-test.nix, driver.nix, run.nix
+- VLan — VDE switch management, deterministic MACs, QEMU NIC flags
+- smoke test (single VM) passing in `nix flake check`
 
-### TestScript
-- `TestScript.eval_string/2` — evals elixir code with bindings: each machine name as a variable, plus `driver` and `start_all`
-- `TestScript.eval_file/2` — reads file then eval_string
-- mirrors python driver's `exec(test_script, symbols)` approach
+## next
 
-167 tests passing, `nix flake check` green.
+### multi-node smoke test
+- current smoke test only uses one VM
+- add a two-node test through make-test.nix with VLANs
+- validates the full multi-VM pipeline end-to-end
 
----
+### graceful driver shutdown
+- `CLI.run_test` calls `GenServer.stop(driver)` but doesn't shut down VMs
+- Driver.terminate should call Machine.shutdown on all machines
 
-## 2026-02-07: VLan / inter-VM networking (done)
+### missing machine methods
+- `sleep/2` — simple timer
+- `user` param on systemctl/start_job/stop_job
+- OCR / screenshot text extraction
+- `succeed/2`, `fail/2` — execute with assertion on exit code
 
-- `NixosTest.VLan` GenServer — manages `vde_switch` processes in hub mode
-- `qemu_nic_mac/2` — deterministic MAC: `52:54:00:12:XX:YY`
-- `qemu_nic_flags/3` — generates `-device virtio-net-pci` + `-netdev vde` QEMU args
-- sets `QEMU_VDE_SOCKET_N` env vars for NixOS-generated QEMU start scripts
-- `Driver` creates VLANs before VMs, deduplicates, tears down on terminate
-- `Driver.get_vlans/1` — returns `[{nr, socket_dir}]`
-- added `vde2` to devshell and nix test deps
+### firecracker nix integration
+- vmlinux kernel extraction from NixOS config
+- ext4 rootfs builder
+- vsock backdoor NixOS service/module
+- firecracker make-test.nix variant
 
-132 tests passing, `nix flake check` green.
+### Backend.CloudHypervisor
+- REST API client (similar to firecracker)
+- virtconsole shell (reuses Transport.VirtConsole)
+- cloud-hypervisor nix integration
 
----
+### other
+- test DSL as alternative to raw elixir scripts
+- in-guest screenshots via xvfb + imagemagick (non-QEMU backends)
+- `Network` behaviour — TAP + bridge networking abstraction
 
-## 2026-02-06: snapshot create/restore (done)
+## research notes
 
-- `Backend.snapshot_create/2`, `Backend.snapshot_load/2`, `Backend.restore_from_snapshot/2` callbacks
-- `snapshot_create` — PATCH /vm to pause, PUT /snapshot/create
-- `snapshot_load` — PUT /snapshot/load, PATCH /vm to resume (existing FC process)
-- `restore_from_snapshot` — full lifecycle: kill old FC, spawn fresh, load, resume, reconnect shell via vsock
-- `Machine.snapshot_create/2`, `Machine.snapshot_restore/2` GenServer calls
-- `snapshot_restore` uses `restore_from_snapshot` and updates Machine shell pid
-- top-level `NixosTest.snapshot_create/2`, `NixosTest.snapshot_restore/2`
-- Backend.QEMU and Backend.Mock return `{:error, :unsupported}`
+### firecracker viability
+- **vsock replaces virtconsole**: host connects to firecracker UDS, sends `CONNECT <port>\n`, gets bidirectional stream to guest. same command protocol, only connection establishment changes
+- **snapshot/restore**: boot once, snapshot after systemd ready, restore in ~50-150ms per clone. memory is MAP_PRIVATE mmap (CoW). this is how AWS Lambda works
+- **networking**: TAP + linux bridges replace VDE. `ip link set down` replaces `set_link`. `tc`/`netem` adds packet loss/latency/corruption
+- **GUI**: xvfb + xdotool inside guest. no pre-boot screen capture, but irrelevant for 99%+ of NixOS tests
+- **no virtconsole, no QMP, no VGA** — all replaced by the above
 
-123 tests passing, `nix flake check` green.
+### cloud-hypervisor viability
+- has virtconsole and virtiofs (shell backdoor + shared dirs work unchanged)
+- REST API instead of QMP
+- no VGA/screenshots, no keyboard sim
+- less compelling than firecracker since no snapshot/restore perf story
 
----
-
-## 2026-02-06: Backend.Firecracker (done)
-
-### transport
-- `Transport.Vsock` — CONNECT protocol over firecracker's vsock UDS
-- waits for backdoor ready message like VirtConsole
-- Shell updated to accept custom `transport_config`
-
-### REST API client
-- `Firecracker.API` — hand-rolled HTTP/1.1 over UDS, no external deps
-- `put/3`, `patch/3`, `get/2` with JSON encode/decode
-
-### backend
-- `Backend.Firecracker` — full Backend behaviour implementation
-- spawns firecracker, configures via API (logger, machine-config, boot-source,
-  drives, vsock, network interfaces), boots, connects shell via vsock
-- shutdown via poweroff, halt via SendCtrlAltDel + force kill
-- block/unblock via host `ip link set` on TAP interfaces
-- unsupported: screenshot, send_key, forward_port, send_console
-
-### also
-- `send_console/2` — writes to QEMU stdin (serial console)
-
-118 tests passing, `nix flake check` green.
-
----
-
-## 2026-02-06: tty text, convenience wrappers, copy_from_vm (done)
-
-- `get_tty_text/2` — read `/dev/vcs<N>` virtual terminal content
-- `wait_until_tty_matches/4` — poll VT against regex
-- `wait_for_closed_port/3` — poll until TCP port is closed
-- `wait_for_open_unix_socket/3` — poll until unix socket exists
-- `start_job/2`, `stop_job/2` — systemctl start/stop wrappers
-- `copy_from_vm/3` — base64 file transfer from guest to host
-
-100 tests passing, `nix flake check` green.
-
----
-
-## 2026-02-06: shell reconnect for reboot (done)
-
-- `Shell.reconnect/2` — closes old socket, calls transport.connect again
-- `Machine.reboot/2` — sends ctrl-alt-delete then waits for shell reconnect
-- machine fully usable after reboot returns
-
-93 tests passing, `nix flake check` green.
-
----
-
-## 2026-02-06: block/unblock, forward_port, reboot (done)
-
-### network control
-- `block/1` — QMP `set_link` to disable inter-VM network (virtio-net-pci.1)
-- `unblock/1` — QMP `set_link` to re-enable inter-VM network
-- new Backend callbacks: `block/1`, `unblock/1`
-
-### port forwarding
-- `forward_port/3` — QMP `human-monitor-command` for SLIRP `hostfwd_add`
-- new Backend callback: `forward_port/3`
-
-### reboot
-- `reboot/1` — sends ctrl-alt-delete via QMP, marks machine disconnected
-- shell reconnection deferred (needs transport layer changes)
-
-all functions in Machine + NixosTest top-level API.
-92 tests passing, `nix flake check` green.
-
----
-
-## 2026-02-06: earlier (condensed)
-
-- console log: `get_console_log/1`, `wait_for_console_text/3` — port data accumulation
-- systemd introspection: `get_unit_info/2`, `get_unit_property/3`, `require_unit_state/3`
-- file transfer: `copy_from_host_via_shell/3`
-- keyboard: `send_key/2`, `send_chars/3`, `char_to_key/1`
-- retry helpers: `wait_until_succeeds/3`, `wait_until_fails/3`, `wait_for_file/3`
-- convenience: `systemctl/2`, `crash/1`
-- error handling: all handle_call paths return `{:error, reason}` tuples
-- credo cleanup: flattened nesting, number format, alias ordering
-- typespecs on all public functions, dialyzer clean
-- hypervisor abstraction: Backend behaviour (14 callbacks), Backend.QEMU, Backend.Mock
-- Shell.Transport behaviour: Transport.VirtConsole extracted from shell.ex
-
----
-
-## 2026-01-31: earlier (condensed)
-
-- integration tests with real QEMU VM (boot → execute → wait_for_unit → shutdown)
-- CLI: `eval` and `eval-file` subcommands
-- QMP: skip async events, retry connection 10x
-- graceful shutdown: `Machine.shutdown/2`, `Machine.halt/2`, `Machine.wait_for_shutdown/2`
-- multi-VM: fixed env var syntax, socket timing, shell timeout
-- Driver: start_all/1, get_machine/2, manages MachineSupervisor
+### ~80%+ of nixpkgs NixOS tests are shell-only
+tests using only succeed/fail/wait_for_unit/wait_for_open_port don't need VGA, keyboard, or any QEMU-specific features — can run on any backend
