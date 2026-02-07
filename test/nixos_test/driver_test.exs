@@ -10,6 +10,58 @@ defmodule NixosTest.DriverTest do
     :ok
   end
 
+  describe "VLANs" do
+    test "creates VDE switches for specified VLANs" do
+      tmp = Path.join(System.tmp_dir!(), "driver-vlan-#{:rand.uniform(100_000)}")
+      File.mkdir_p!(tmp)
+
+      {:ok, driver} =
+        Driver.start_link(vlans: [1, 2], tmp_dir: tmp)
+
+      vlans = Driver.get_vlans(driver)
+      assert length(vlans) == 2
+
+      [v1, v2] = Enum.sort_by(vlans, fn {nr, _} -> nr end)
+      assert {1, socket_dir1} = v1
+      assert {2, socket_dir2} = v2
+      assert File.dir?(socket_dir1)
+      assert File.dir?(socket_dir2)
+
+      GenServer.stop(driver)
+      File.rm_rf!(tmp)
+    end
+
+    test "VLANs are stopped when driver terminates" do
+      tmp = Path.join(System.tmp_dir!(), "driver-vlan-stop-#{:rand.uniform(100_000)}")
+      File.mkdir_p!(tmp)
+
+      {:ok, driver} =
+        Driver.start_link(vlans: [1], tmp_dir: tmp)
+
+      [{1, socket_dir}] = Driver.get_vlans(driver)
+      assert File.dir?(socket_dir)
+
+      GenServer.stop(driver)
+      Process.sleep(200)
+
+      File.rm_rf!(tmp)
+    end
+
+    test "deduplicates VLAN numbers" do
+      tmp = Path.join(System.tmp_dir!(), "driver-vlan-dedup-#{:rand.uniform(100_000)}")
+      File.mkdir_p!(tmp)
+
+      {:ok, driver} =
+        Driver.start_link(vlans: [1, 1, 2, 2, 2], tmp_dir: tmp)
+
+      vlans = Driver.get_vlans(driver)
+      assert length(vlans) == 2
+
+      GenServer.stop(driver)
+      File.rm_rf!(tmp)
+    end
+  end
+
   describe "Driver" do
     test "can start a driver process" do
       {:ok, pid} = Driver.start_link([])

@@ -13,11 +13,15 @@ defmodule NixosTest.Driver do
 
   require Logger
 
+  alias NixosTest.VLan
+
   defstruct [
     :machines,
     :vlans,
+    :vlan_pids,
     :test_script,
     :out_dir,
+    :tmp_dir,
     :global_timeout,
     :timeout_ref
   ]
@@ -46,6 +50,14 @@ defmodule NixosTest.Driver do
   end
 
   @doc """
+  Get all VLANs as a list of {nr, socket_dir} tuples
+  """
+  @spec get_vlans(GenServer.server()) :: [{non_neg_integer(), String.t()}]
+  def get_vlans(driver) do
+    GenServer.call(driver, :get_vlans)
+  end
+
+  @doc """
   Run the test script.
   """
   @spec run_tests(GenServer.server()) :: :ok
@@ -57,14 +69,20 @@ defmodule NixosTest.Driver do
 
   @impl true
   def init(opts) do
+    tmp_dir = Keyword.get(opts, :tmp_dir, System.tmp_dir!())
+    vlan_nrs = opts |> Keyword.get(:vlans, []) |> Enum.uniq()
+    vlan_pids = start_vlans(vlan_nrs, tmp_dir)
+
     machine_configs = Keyword.get(opts, :machines, [])
     machines = start_machines(machine_configs)
 
     state = %__MODULE__{
       machines: machines,
-      vlans: %{},
+      vlans: vlan_nrs,
+      vlan_pids: vlan_pids,
+      tmp_dir: tmp_dir,
       test_script: Keyword.get(opts, :test_script),
-      out_dir: Keyword.get(opts, :out_dir, System.tmp_dir!()),
+      out_dir: Keyword.get(opts, :out_dir, tmp_dir),
       global_timeout: Keyword.get(opts, :global_timeout, 3_600_000)
     }
 
@@ -72,6 +90,14 @@ defmodule NixosTest.Driver do
     timeout_ref = Process.send_after(self(), :global_timeout, state.global_timeout)
 
     {:ok, %{state | timeout_ref: timeout_ref}}
+  end
+
+  defp start_vlans(vlan_nrs, tmp_dir) do
+    Enum.map(vlan_nrs, fn nr ->
+      Logger.info("starting VLan #{nr}")
+      {:ok, pid} = VLan.start_link(nr: nr, tmp_dir: tmp_dir)
+      {nr, pid}
+    end)
   end
 
   defp start_machines(configs) do
@@ -101,6 +127,16 @@ defmodule NixosTest.Driver do
     |> Enum.each(fn {:ok, :ok} -> :ok end)
 
     {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call(:get_vlans, _from, state) do
+    vlans =
+      Enum.map(state.vlan_pids, fn {nr, pid} ->
+        {nr, VLan.socket_dir(pid)}
+      end)
+
+    {:reply, vlans, state}
   end
 
   @impl true
@@ -140,14 +176,21 @@ defmodule NixosTest.Driver do
     end
 
     # cleanup machines (some may already be stopped)
-    for {_name, pid} <- state.machines do
-      try do
-        if Process.alive?(pid), do: GenServer.stop(pid, :shutdown)
-      catch
-        :exit, _ -> :ok
-      end
+    for {_name, pid} <- state.machines || %{} do
+      safe_stop(pid)
+    end
+
+    # cleanup VLANs
+    for {_nr, pid} <- state.vlan_pids || [] do
+      safe_stop(pid)
     end
 
     :ok
+  end
+
+  defp safe_stop(pid) do
+    if Process.alive?(pid), do: GenServer.stop(pid, :normal)
+  catch
+    :exit, _ -> :ok
   end
 end
