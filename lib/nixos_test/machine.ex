@@ -225,6 +225,17 @@ defmodule NixosTest.Machine do
   end
 
   @doc """
+  Sleep for the given number of seconds
+  """
+  @spec sleep(GenServer.server(), number()) :: :ok
+  def sleep(_machine, secs) do
+    ms = round(secs * 1000)
+    Logger.info("sleeping for #{secs}s")
+    Process.sleep(ms)
+    :ok
+  end
+
+  @doc """
   Force-crash the VM (immediate quit, no graceful shutdown)
   """
   @spec crash(GenServer.server()) :: :ok | {:error, term()}

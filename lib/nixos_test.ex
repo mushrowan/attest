@@ -71,6 +71,14 @@ defmodule NixosTest do
   end
 
   @doc """
+  Sleep for the given number of seconds
+  """
+  @spec sleep(GenServer.server(), number()) :: :ok
+  def sleep(machine, secs) do
+    Machine.sleep(machine, secs)
+  end
+
+  @doc """
   Execute a command and return {exit_code, output}.
   """
   @spec execute(GenServer.server(), String.t()) :: NixosTest.Machine.execute_result()

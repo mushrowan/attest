@@ -225,6 +225,158 @@ defmodule NixosTest.MachineTest do
     end
   end
 
+  describe "succeed/2" do
+    test "returns output on exit code 0" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-succeed-#{:rand.uniform(10000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      test_pid = self()
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [:binary, {:packet, :line}, {:active, false}])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("it works\n") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+        send(test_pid, :mock_done)
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "succeed-ok-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert "it works\n" = Machine.succeed(machine, "echo ok")
+
+      assert_receive :mock_done, 1000
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+
+    test "raises on non-zero exit code" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-succeed-fail-#{:rand.uniform(10000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      test_pid = self()
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [:binary, {:packet, :line}, {:active, false}])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("nope\n") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "1\n")
+        send(test_pid, :mock_done)
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "succeed-raise-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert_raise RuntimeError, ~r/failed with exit code 1/, fn ->
+        Machine.succeed(machine, "bad cmd")
+      end
+
+      assert_receive :mock_done, 1000
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+  end
+
+  describe "fail/2" do
+    test "returns output on non-zero exit code" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-fail-ok-#{:rand.uniform(10000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      test_pid = self()
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [:binary, {:packet, :line}, {:active, false}])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("error msg\n") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "1\n")
+        send(test_pid, :mock_done)
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "fail-ok-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert "error msg\n" = Machine.fail(machine, "bad cmd")
+
+      assert_receive :mock_done, 1000
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+
+    test "raises on zero exit code" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "shell-fail-raise-#{:rand.uniform(10000)}.sock")
+
+      {:ok, shell} = Shell.start_link(socket_path: socket_path)
+
+      test_pid = self()
+
+      spawn(fn ->
+        Process.sleep(50)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [:binary, {:packet, :line}, {:active, false}])
+
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("oops\n") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "0\n")
+        send(test_pid, :mock_done)
+      end)
+
+      :ok = Shell.wait_for_connection(shell, 5000)
+
+      {:ok, machine} =
+        Machine.start_link(name: "fail-raise-test", backend: Backend.Mock, shell: shell)
+
+      :ok = Machine.start(machine)
+
+      assert_raise RuntimeError, ~r/unexpectedly succeeded/, fn ->
+        Machine.fail(machine, "should fail")
+      end
+
+      assert_receive :mock_done, 1000
+      GenServer.stop(machine)
+      File.rm(socket_path)
+    end
+  end
+
   describe "wait_until_succeeds/3" do
     test "retries until command succeeds" do
       socket_path =
@@ -1800,6 +1952,20 @@ defmodule NixosTest.MachineTest do
       GenServer.stop(machine)
       File.rm(socket_path)
       File.rm(source)
+    end
+  end
+
+  describe "sleep/2" do
+    test "pauses for the given duration in seconds" do
+      {:ok, machine} =
+        Machine.start_link(name: "sleep-test", backend: Backend.Mock)
+
+      t0 = System.monotonic_time(:millisecond)
+      Machine.sleep(machine, 0.1)
+      elapsed = System.monotonic_time(:millisecond) - t0
+
+      assert elapsed >= 90
+      GenServer.stop(machine)
     end
   end
 end
