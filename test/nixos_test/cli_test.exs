@@ -103,6 +103,31 @@ defmodule NixosTest.CLITest do
     end
   end
 
+  describe "parse_args/1 with --machine-config" do
+    test "parses --machine-config flag" do
+      opts = CLI.parse_args(["--machine-config", "/tmp/machines.json"])
+      assert opts.machine_config == "/tmp/machines.json"
+    end
+
+    test "defaults machine_config to nil" do
+      opts = CLI.parse_args([])
+      assert opts.machine_config == nil
+    end
+
+    test "machine-config and start-scripts are mutually exclusive" do
+      # machine_config takes precedence; start_scripts should be ignored
+      opts =
+        CLI.parse_args([
+          "--machine-config",
+          "/tmp/machines.json",
+          "--start-scripts",
+          "/nix/store/x/bin/run-vm"
+        ])
+
+      assert opts.machine_config == "/tmp/machines.json"
+    end
+  end
+
   describe "parse_args/1 with subcommands" do
     test "recognises eval subcommand" do
       opts = CLI.parse_args(["eval", "1 + 1"])

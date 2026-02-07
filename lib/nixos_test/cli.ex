@@ -9,10 +9,11 @@ defmodule NixosTest.CLI do
 
   require Logger
 
-  alias NixosTest.{Driver, StartCommand, TestScript}
+  alias NixosTest.{Driver, MachineConfig, StartCommand, TestScript}
 
   @type parsed_args :: %{
           start_scripts: [String.t()],
+          machine_config: String.t() | nil,
           vlans: [non_neg_integer()],
           test_script: String.t() | nil,
           global_timeout: non_neg_integer(),
@@ -41,6 +42,7 @@ defmodule NixosTest.CLI do
           keep_vm_state: :boolean,
           global_timeout: :integer,
           start_scripts: :string,
+          machine_config: :string,
           vlans: :string,
           test_script: :string,
           output_dir: :string
@@ -56,6 +58,9 @@ defmodule NixosTest.CLI do
       )
 
     # env var fallbacks (set by nix wrapProgram)
+    machine_config =
+      opts[:machine_config] || System.get_env("machineConfig")
+
     start_scripts_str =
       opts[:start_scripts] || System.get_env("startScripts", "")
 
@@ -69,6 +74,7 @@ defmodule NixosTest.CLI do
 
     %{
       subcommand: subcommand,
+      machine_config: machine_config,
       start_scripts: parse_space_separated(start_scripts_str),
       vlans: parse_vlan_list(vlans_str),
       test_script: test_script,
@@ -118,25 +124,34 @@ defmodule NixosTest.CLI do
     File.mkdir_p!(state_dir)
     out_dir = opts.output_dir || state_dir
 
-    # build machine configs from start scripts
-    machine_configs =
-      Enum.map(opts.start_scripts, fn script ->
-        script
-        |> StartCommand.build(state_dir: state_dir)
-        |> StartCommand.to_machine_config()
-      end)
+    {machine_configs, vlans, global_timeout} =
+      if opts.machine_config do
+        build_from_machine_config(opts.machine_config, state_dir, opts)
+      else
+        build_from_start_scripts(opts, state_dir)
+      end
 
     # ensure state dirs exist
     Enum.each(machine_configs, fn config ->
       File.mkdir_p!(config.state_dir)
-      File.mkdir_p!(config.shared_dir)
+
+      if Map.has_key?(config, :shared_dir) do
+        File.mkdir_p!(config.shared_dir)
+      end
+    end)
+
+    # copy firecracker rootfs images to writable state dirs
+    Enum.each(machine_configs, fn config ->
+      if Map.has_key?(config, :rootfs_source) do
+        File.cp!(config.rootfs_source, config.rootfs_path)
+      end
     end)
 
     {:ok, driver} =
       Driver.start_link(
         machines: machine_configs,
-        vlans: opts.vlans,
-        global_timeout: opts.global_timeout,
+        vlans: vlans,
+        global_timeout: global_timeout,
         out_dir: out_dir,
         tmp_dir: state_dir
       )
@@ -154,6 +169,31 @@ defmodule NixosTest.CLI do
     GenServer.stop(driver)
   end
 
+  defp build_from_machine_config(config_path, state_dir, opts) do
+    parsed = MachineConfig.parse_file(config_path, state_dir: state_dir)
+
+    # CLI flags override JSON config values
+    vlans = if opts.vlans != [], do: opts.vlans, else: parsed.vlans
+
+    global_timeout =
+      if opts.global_timeout != 3_600_000,
+        do: opts.global_timeout,
+        else: parsed.global_timeout
+
+    {parsed.machines, vlans, global_timeout}
+  end
+
+  defp build_from_start_scripts(opts, state_dir) do
+    machine_configs =
+      Enum.map(opts.start_scripts, fn script ->
+        script
+        |> StartCommand.build(state_dir: state_dir)
+        |> StartCommand.to_machine_config()
+      end)
+
+    {machine_configs, opts.vlans, opts.global_timeout}
+  end
+
   defp print_help do
     IO.puts("""
     nixos-test-ng - NixOS test driver in Elixir
@@ -167,11 +207,13 @@ defmodule NixosTest.CLI do
       -t, --global-timeout   global timeout in seconds (default: 3600)
       -o, --output-dir       output directory for screenshots etc
       --start-scripts        space-separated VM start script paths
+      --machine-config       path to JSON machine config file
       --vlans                space-separated VLAN numbers
       --test-script          path to elixir test script
 
     environment variables (set by nix wrapProgram):
       startScripts           space-separated VM start script paths
+      machineConfig          path to JSON machine config file
       vlans                  space-separated VLAN numbers
       testScript             path to test script file
       globalTimeout          timeout in seconds
