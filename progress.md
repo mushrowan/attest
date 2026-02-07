@@ -2,7 +2,7 @@
 
 ## status
 
-173 tests, `nix flake check` green
+174 tests, `nix flake check` green
 
 ### what's built
 - Machine GenServer with Backend behaviour (14 callbacks)
@@ -10,7 +10,7 @@
 - Shell GenServer with Transport behaviour (VirtConsole, Vsock)
 - QMP GenServer with greeting/negotiation, async event filtering
 - Driver GenServer — start_all, get_machine, global timeout, VLan lifecycle, graceful shutdown
-- full machine ops: execute, succeed, fail, sleep, wait_for_unit, wait_for_open_port, shutdown, reboot, screenshot, send_key, send_chars, send_console, block/unblock, forward_port, copy_from_vm, copy_from_host_via_shell, snapshots (firecracker), get_tty_text, get_console_log, systemctl, get_unit_info, get_unit_property, wait_until_succeeds/fails, wait_for_file, wait_for_console_text, wait_until_tty_matches, wait_for_closed_port, wait_for_open_unix_socket, start_job, stop_job, crash
+- full machine ops: execute, succeed, fail, sleep, wait_for_unit, wait_for_open_port, shutdown, reboot, screenshot, send_key, send_chars, send_console, block/unblock, forward_port, copy_from_vm, copy_from_host_via_shell, snapshots (firecracker), get_tty_text, get_console_log, systemctl (with user: opt), get_unit_info, get_unit_property, wait_until_succeeds/fails, wait_for_file, wait_for_console_text, wait_until_tty_matches, wait_for_closed_port, wait_for_open_unix_socket, start_job/stop_job (with user: opt), crash
 - nix integration: StartCommand, CLI, TestScript, make-test.nix, driver.nix, run.nix
 - VLan — VDE switch management, deterministic MACs, QEMU NIC flags
 - smoke tests: single-VM and multi-node (server + client) passing in `nix flake check`
@@ -19,7 +19,6 @@
 ## next
 
 ### missing machine methods
-- `user` param on systemctl/start_job/stop_job
 - OCR / screenshot text extraction
 
 ### firecracker nix integration
