@@ -61,6 +61,7 @@ pkgs.runCommand "nixos-test-driver-${name}"
 
         # create wrapper
         makeWrapper ${nixos-test-ng}/bin/nixos-test $out/bin/nixos-test-driver \
+          --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.vde2 ]} \
           --set startScripts "''${vmStartScripts[*]}" \
           --set testScript "$out/test-script.exs" \
           --set globalTimeout "${toString globalTimeout}" \

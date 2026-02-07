@@ -121,6 +121,32 @@
                   end
                 '';
               };
+              # multi-node make-test (two VMs, validates multi-node pipeline)
+              make-test-multi = import ./nix/make-test.nix {
+                inherit pkgs;
+                nixos-test-ng = nixos-test;
+                name = "multi";
+                nodes = {
+                  server = { };
+                  client = { };
+                };
+                testScript = ''
+                  start_all.()
+                  NixosTest.wait_for_unit(server, "multi-user.target")
+                  NixosTest.wait_for_unit(client, "multi-user.target")
+
+                  server_out = NixosTest.succeed(server, "hostname")
+                  client_out = NixosTest.succeed(client, "hostname")
+
+                  unless String.contains?(server_out, "server") do
+                    raise "server hostname mismatch: #{inspect(server_out)}"
+                  end
+
+                  unless String.contains?(client_out, "client") do
+                    raise "client hostname mismatch: #{inspect(client_out)}"
+                  end
+                '';
+              };
             }
           );
 
