@@ -13,21 +13,14 @@
 - full machine ops: execute, succeed, fail, sleep, wait_for_unit, wait_for_open_port, shutdown, reboot, screenshot, send_key, send_chars, send_console, block/unblock, forward_port, copy_from_vm, copy_from_host_via_shell, snapshots (firecracker), get_tty_text, get_console_log, systemctl (with user: opt), get_unit_info, get_unit_property, wait_until_succeeds/fails, wait_for_file, wait_for_console_text, wait_until_tty_matches, wait_for_closed_port, wait_for_open_unix_socket, start_job/stop_job (with user: opt), crash
 - nix integration: StartCommand, CLI, TestScript, make-test.nix, driver.nix, run.nix
 - VLan — VDE switch management, deterministic MACs, QEMU NIC flags
-- smoke tests: single-VM and multi-node (server + client) passing in `nix flake check`
-- driver.nix includes vde2 in PATH for VLan support
+- QEMU smoke tests: single-VM and multi-node passing in `nix flake check`
 - MachineConfig — backend-agnostic JSON config parser (QEMU + Firecracker)
-- CLI --machine-config flag with env var fallback, firecracker rootfs copy
-- vsock backdoor NixOS module for firecracker guests
+- CLI --machine-config flag with env var fallback, firecracker rootfs copy+chmod
+- firecracker nix integration: make-rootfs.nix, test-instrumentation.nix, make-test.nix
+- firecracker smoke test passing in `nix flake check` (boot, execute, shutdown)
+- vsock transport retry on closed/econnrefused during guest boot
 
 ## next
-
-### firecracker nix integration
-- DONE: ext4 rootfs builder (make-rootfs.nix wraps nixpkgs make-ext4-fs.nix)
-- DONE: vmlinux extraction (kernel.dev output)
-- DONE: firecracker test-instrumentation.nix (vsock backdoor, /dev/vda rootfs, initrd, nix-path-registration)
-- DONE: firecracker make-test.nix (vmlinux + initrd + ext4 rootfs + vsock-backdoor)
-- DONE: firecracker-smoke check in flake.nix
-- TODO: actually run firecracker-smoke test (needs KVM, likely CI or manual)
 
 ### missing machine methods
 - OCR / screenshot text extraction
