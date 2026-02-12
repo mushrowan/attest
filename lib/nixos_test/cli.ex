@@ -141,9 +141,11 @@ defmodule NixosTest.CLI do
     end)
 
     # copy firecracker rootfs images to writable state dirs
+    # nix store files are read-only, firecracker needs write access
     Enum.each(machine_configs, fn config ->
       if Map.has_key?(config, :rootfs_source) do
         File.cp!(config.rootfs_source, config.rootfs_path)
+        File.chmod!(config.rootfs_path, 0o644)
       end
     end)
 

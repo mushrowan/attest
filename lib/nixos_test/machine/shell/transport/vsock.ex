@@ -19,12 +19,29 @@ defmodule NixosTest.Machine.Shell.Transport.Vsock do
     port = Map.fetch!(config, :port)
     deadline = System.monotonic_time(:millisecond) + timeout
 
+    connect_with_retry(uds_path, port, deadline)
+  end
+
+  # retry the full connect cycle — the vsock UDS appears when
+  # firecracker starts but the guest listener isn't ready yet
+  defp connect_with_retry(uds_path, port, deadline) do
     with {:ok, socket} <- connect_uds(uds_path, deadline),
          :ok <- send_connect(socket, port),
          :ok <- recv_ok(socket, remaining(deadline)),
          :ok <- wait_for_backdoor_ready(socket, remaining(deadline)) do
       Logger.info("vsock connected to port #{port}")
       {:ok, socket}
+    else
+      {:error, reason} when reason in [:closed, :econnrefused, :econnreset] ->
+        if remaining(deadline) > 500 do
+          Process.sleep(500)
+          connect_with_retry(uds_path, port, deadline)
+        else
+          {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

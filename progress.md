@@ -2,7 +2,7 @@
 
 ## status
 
-174 tests, `nix flake check` green
+183 tests, `nix flake check` green
 
 ### what's built
 - Machine GenServer with Backend behaviour (14 callbacks)
@@ -15,17 +15,22 @@
 - VLan — VDE switch management, deterministic MACs, QEMU NIC flags
 - smoke tests: single-VM and multi-node (server + client) passing in `nix flake check`
 - driver.nix includes vde2 in PATH for VLan support
+- MachineConfig — backend-agnostic JSON config parser (QEMU + Firecracker)
+- CLI --machine-config flag with env var fallback, firecracker rootfs copy
+- vsock backdoor NixOS module for firecracker guests
 
 ## next
 
+### firecracker nix integration
+- DONE: ext4 rootfs builder (make-rootfs.nix wraps nixpkgs make-ext4-fs.nix)
+- DONE: vmlinux extraction (kernel.dev output)
+- DONE: firecracker test-instrumentation.nix (vsock backdoor, /dev/vda rootfs, initrd, nix-path-registration)
+- DONE: firecracker make-test.nix (vmlinux + initrd + ext4 rootfs + vsock-backdoor)
+- DONE: firecracker-smoke check in flake.nix
+- TODO: actually run firecracker-smoke test (needs KVM, likely CI or manual)
+
 ### missing machine methods
 - OCR / screenshot text extraction
-
-### firecracker nix integration
-- vmlinux kernel extraction from NixOS config
-- ext4 rootfs builder
-- vsock backdoor NixOS service/module
-- firecracker make-test.nix variant
 
 ### Backend.CloudHypervisor
 - REST API client (similar to firecracker)
@@ -33,6 +38,7 @@
 - cloud-hypervisor nix integration
 
 ### other
+- rename project to **attest**
 - test DSL as alternative to raw elixir scripts
 - in-guest screenshots via xvfb + imagemagick (non-QEMU backends)
 - `Network` behaviour — TAP + bridge networking abstraction

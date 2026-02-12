@@ -147,6 +147,24 @@
                   end
                 '';
               };
+              # firecracker make-test smoke test (ext4 rootfs, vmlinux, vsock backdoor)
+              firecracker-smoke = import ./nix/firecracker/make-test.nix {
+                inherit pkgs;
+                nixos-test-ng = nixos-test;
+                name = "fc-smoke";
+                nodes = {
+                  machine = { };
+                };
+                testScript = ''
+                  start_all.()
+                  NixosTest.wait_for_unit(machine, "multi-user.target")
+                  output = NixosTest.succeed(machine, "echo hello-from-firecracker")
+
+                  unless String.contains?(output, "hello-from-firecracker") do
+                    raise "unexpected output: #{inspect(output)}"
+                  end
+                '';
+              };
             }
           );
 
