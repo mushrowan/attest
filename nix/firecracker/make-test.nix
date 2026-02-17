@@ -78,16 +78,12 @@ let
     in
     "AA:FC:00:${hex vlan}:${hex nodeNum}:01";
 
-  # TAP device name: tap-{testname}-{nodename}-{vlan} (max 15 chars for IFNR)
-  # use a short hash to stay within limits
+  # TAP device name: t{nodeNumber}v{vlan} - short, unique, max 15 chars
   tapName = nodeName: vlan:
-    let
-      raw = "t${builtins.substring 0 4 name}${builtins.substring 0 4 nodeName}${toString vlan}";
-    in
-    builtins.substring 0 15 raw;
+    "t${toString nodeNumbers.${nodeName}}v${toString vlan}";
 
   # bridge name per vlan
-  bridgeName = vlan: builtins.substring 0 15 "br${builtins.substring 0 4 name}${toString vlan}";
+  bridgeName = vlan: "br${toString vlan}";
 
   # /etc/hosts entries: all nodes on all VLANs
   hostsEntries = lib.concatStringsSep "\n" (
