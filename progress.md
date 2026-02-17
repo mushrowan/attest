@@ -36,6 +36,8 @@
 - TAP + bridge networking for multi-VM firecracker tests (user+net namespace)
 - static IP assignment, /etc/hosts, virtio_net kernel module in test-instrumentation
 - MachineConfig parses tap_interfaces from JSON
+- cloud-hypervisor networking: same bridge+TAP approach, block/unblock via ip link
+- cloud-hypervisor network integration test (alice + bob ping by IP and hostname)
 - README and updated ARCHITECTURE.md
 
 ## next
