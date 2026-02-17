@@ -30,6 +30,9 @@
 - firecracker snapshot/restore integration test (84ms restore)
 - `nix build .#bench` — backend benchmark (qemu, fc, ch, fc-snapshot)
 - flaky test fix: unique machine names + synchronous terminate cleanup
+- line-buffered TCP recv in shell (large outputs split across TCP segments)
+- `reboot -f -p` for microVM shutdown (no ACPI), parallel teardown in driver
+- railscale integration: module-smoke and policy-reload tests ported to attest
 
 ## next
 - ~~rename project to **attest**~~ done
