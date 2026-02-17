@@ -46,7 +46,7 @@ pkgs.runCommand "vm-test-run-${name}"
 
     ${wrapCmd} <<'INNER_SCRIPT'
     ${pkgs.lib.optionalString hasNetwork ''
-    ip link set lo up
+      ip link set lo up
     ''}
 
     ${preScript}

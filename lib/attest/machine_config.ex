@@ -162,7 +162,20 @@ defmodule Attest.MachineConfig do
         path -> %{extra_disks: [%{"path" => path, "readonly" => true}]}
       end
 
-    base |> Map.merge(optional_fields) |> Map.merge(extra_disks)
+    tap_interfaces =
+      case Map.get(m, "tap_interfaces") do
+        nil ->
+          %{}
+
+        taps when is_list(taps) ->
+          parsed = Enum.map(taps, fn [id, dev, mac] -> {id, dev, mac} end)
+          %{tap_interfaces: parsed}
+      end
+
+    base
+    |> Map.merge(optional_fields)
+    |> Map.merge(extra_disks)
+    |> Map.merge(tap_interfaces)
   end
 
   defp parse_machine(%{"backend" => backend}, _state_dir) do

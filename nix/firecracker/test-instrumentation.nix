@@ -33,7 +33,7 @@
 
     vlans = lib.mkOption {
       type = lib.types.listOf lib.types.int;
-      default = [];
+      default = [ ];
       description = "VLAN numbers this node is attached to";
     };
 
@@ -85,7 +85,7 @@
       "erofs"
       "overlay"
     ]
-    ++ lib.optionals (config.testing.vlans != []) [
+    ++ lib.optionals (config.testing.vlans != [ ]) [
       "virtio_net"
     ];
 
@@ -128,15 +128,20 @@
     networking.useDHCP = false;
 
     # static IP per VLAN: 192.168.{vlan}.{nodeNumber}/24
-    networking.interfaces = lib.mkIf (config.testing.vlans != []) (
-      lib.listToAttrs (lib.imap0 (idx: vlan:
-        lib.nameValuePair "eth${toString idx}" {
-          ipv4.addresses = [{
-            address = "192.168.${toString vlan}.${toString config.testing.nodeNumber}";
-            prefixLength = 24;
-          }];
-        }
-      ) config.testing.vlans)
+    networking.interfaces = lib.mkIf (config.testing.vlans != [ ]) (
+      lib.listToAttrs (
+        lib.imap0 (
+          idx: vlan:
+          lib.nameValuePair "eth${toString idx}" {
+            ipv4.addresses = [
+              {
+                address = "192.168.${toString vlan}.${toString config.testing.nodeNumber}";
+                prefixLength = 24;
+              }
+            ];
+          }
+        ) config.testing.vlans
+      )
     );
 
     # hostname resolution for all nodes

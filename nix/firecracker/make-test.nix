@@ -57,46 +57,49 @@ let
 
   # resolve effective VLANs: if enableNetwork or multi-node, default to [1]
   effectiveVlans =
-    if vlans != [] then vlans
-    else if enableNetwork || (builtins.length (builtins.attrNames nodes)) > 1 then [ 1 ]
-    else [];
+    if vlans != [ ] then
+      vlans
+    else if enableNetwork || (builtins.length (builtins.attrNames nodes)) > 1 then
+      [ 1 ]
+    else
+      [ ];
 
-  hasNetwork = effectiveVlans != [];
+  hasNetwork = effectiveVlans != [ ];
 
   # sorted node names for deterministic number assignment
   sortedNames = lib.sort (a: b: a < b) (builtins.attrNames nodes);
 
   # node number: alphabetically sorted, 1-indexed
-  nodeNumbers = lib.listToAttrs (
-    lib.imap1 (idx: name: lib.nameValuePair name idx) sortedNames
-  );
+  nodeNumbers = lib.listToAttrs (lib.imap1 (idx: name: lib.nameValuePair name idx) sortedNames);
 
   # generate a deterministic MAC address: AA:FC:00:{vlan}:{nodeNum}:01
-  macAddress = vlan: nodeNum:
+  macAddress =
+    vlan: nodeNum:
     let
       hex = n: lib.toLower (lib.fixedWidthString 2 "0" (lib.toHexString n));
     in
     "AA:FC:00:${hex vlan}:${hex nodeNum}:01";
 
   # TAP device name: t{nodeNumber}v{vlan} - short, unique, max 15 chars
-  tapName = nodeName: vlan:
-    "t${toString nodeNumbers.${nodeName}}v${toString vlan}";
+  tapName = nodeName: vlan: "t${toString nodeNumbers.${nodeName}}v${toString vlan}";
 
   # bridge name per vlan
   bridgeName = vlan: "br${toString vlan}";
 
   # /etc/hosts entries: all nodes on all VLANs
   hostsEntries = lib.concatStringsSep "\n" (
-    lib.concatMap (nodeName:
-      let num = nodeNumbers.${nodeName}; in
-      map (vlan:
-        "192.168.${toString vlan}.${toString num} ${nodeName}"
-      ) effectiveVlans
+    lib.concatMap (
+      nodeName:
+      let
+        num = nodeNumbers.${nodeName};
+      in
+      map (vlan: "192.168.${toString vlan}.${toString num} ${nodeName}") effectiveVlans
     ) sortedNames
   );
 
   # build TAP interface list for a node: [{iface_id, host_dev_name, guest_mac}]
-  nodeTaps = nodeName:
+  nodeTaps =
+    nodeName:
     lib.imap0 (idx: vlan: {
       iface_id = "eth${toString idx}";
       host_dev_name = tapName nodeName vlan;
@@ -130,8 +133,7 @@ let
       initrd = "${nixos.config.system.build.initialRamdisk}/${nixos.config.system.boot.loader.initrdFile}";
 
       bootArgs = builtins.concatStringsSep " " (
-        nixos.config.boot.kernelParams
-        ++ [ "init=${toplevel}/init" ]
+        nixos.config.boot.kernelParams ++ [ "init=${toplevel}/init" ]
       );
 
       rootfs =
@@ -152,7 +154,13 @@ let
     in
     {
       config = nixos.config;
-      inherit toplevel vmlinux initrd bootArgs rootfs;
+      inherit
+        toplevel
+        vmlinux
+        initrd
+        bootArgs
+        rootfs
+        ;
     }
     // storeImage;
 
@@ -177,7 +185,11 @@ let
       store_image_path = "${node.store}";
     }
     // lib.optionalAttrs hasNetwork {
-      tap_interfaces = map (t: [t.iface_id t.host_dev_name t.guest_mac]) (nodeTaps nodeName);
+      tap_interfaces = map (t: [
+        t.iface_id
+        t.host_dev_name
+        t.guest_mac
+      ]) (nodeTaps nodeName);
     }
   ) evaluatedNodes;
 
@@ -191,9 +203,14 @@ let
     '') effectiveVlans}
 
     # create TAP devices and attach to bridges
-    ${lib.concatMapStringsSep "\n" (nodeName:
-      lib.concatMapStringsSep "\n" (vlan:
-        let tap = tapName nodeName vlan; in ''
+    ${lib.concatMapStringsSep "\n" (
+      nodeName:
+      lib.concatMapStringsSep "\n" (
+        vlan:
+        let
+          tap = tapName nodeName vlan;
+        in
+        ''
           ip tuntap add ${tap} mode tap
           ip link set ${tap} master ${bridgeName vlan}
           ip link set ${tap} up
@@ -213,7 +230,7 @@ let
       name
       machines
       ;
-    vlans = [];  # VDE vlans not used with firecracker networking
+    vlans = [ ]; # VDE vlans not used with firecracker networking
     inherit testScript;
   };
 

@@ -53,6 +53,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
     :api_socket_path,
     :vsock_uds_path,
     :extra_disks,
+    :tap_interfaces,
     :ch_port,
     :shell,
     port_exited: false
@@ -79,6 +80,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
        vsock_cid: Map.get(config, :vsock_cid, 3),
        vsock_port: Map.get(config, :vsock_port, 1234),
        extra_disks: Map.get(config, :extra_disks, []),
+       tap_interfaces: Map.get(config, :tap_interfaces, []),
        state_dir: state_dir,
        api_socket_path: Path.join(state_dir, "cloud-hypervisor.sock"),
        vsock_uds_path: Path.join(state_dir, "v.sock")
@@ -232,10 +234,26 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
   def send_console(_state, _chars), do: {:error, :unsupported}
 
   @impl true
-  def block(_state), do: {:error, :unsupported}
+  def block(%{tap_interfaces: []}), do: {:error, :unsupported}
+
+  def block(%{tap_interfaces: taps}) do
+    Enum.each(taps, fn {_id, host_dev, _mac} ->
+      System.cmd("ip", ["link", "set", host_dev, "down"])
+    end)
+
+    :ok
+  end
 
   @impl true
-  def unblock(_state), do: {:error, :unsupported}
+  def unblock(%{tap_interfaces: []}), do: {:error, :unsupported}
+
+  def unblock(%{tap_interfaces: taps}) do
+    Enum.each(taps, fn {_id, host_dev, _mac} ->
+      System.cmd("ip", ["link", "set", host_dev, "up"])
+    end)
+
+    :ok
+  end
 
   # snapshots not yet implemented
   @impl true
@@ -288,12 +306,24 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
         "socket" => state.vsock_uds_path
       }
     }
+    |> maybe_put_net(state.tap_interfaces)
   end
 
   # private helpers
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp maybe_put_net(map, []), do: map
+
+  defp maybe_put_net(map, taps) do
+    net =
+      Enum.map(taps, fn {_iface_id, host_dev, mac} ->
+        %{"tap" => host_dev, "mac" => mac}
+      end)
+
+    Map.put(map, "net", net)
+  end
 
   defp wait_for_file(path, timeout) do
     deadline = System.monotonic_time(:millisecond) + timeout
