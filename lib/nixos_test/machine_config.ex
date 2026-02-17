@@ -35,6 +35,7 @@ defmodule NixosTest.MachineConfig do
   @backend_map %{
     "qemu" => NixosTest.Machine.Backend.QEMU,
     "firecracker" => NixosTest.Machine.Backend.Firecracker,
+    "cloud-hypervisor" => NixosTest.Machine.Backend.CloudHypervisor,
     "mock" => NixosTest.Machine.Backend.Mock
   }
 
@@ -89,6 +90,36 @@ defmodule NixosTest.MachineConfig do
       state_dir: node_state_dir,
       vsock_cid: Map.get(m, "vsock_cid", 3),
       vsock_port: Map.get(m, "vsock_port", 1234)
+    }
+
+    optional_fields =
+      [:initrd_path, :kernel_boot_args, :mem_size_mib, :vcpu_count]
+      |> Enum.reduce(%{}, fn field, acc ->
+        key = Atom.to_string(field)
+
+        case Map.get(m, key) do
+          nil -> acc
+          val -> Map.put(acc, field, val)
+        end
+      end)
+
+    Map.merge(base, optional_fields)
+  end
+
+  defp parse_machine(%{"backend" => "cloud-hypervisor"} = m, state_dir) do
+    name = Map.fetch!(m, "name")
+    node_state_dir = Path.join(state_dir, name)
+    rootfs_source = Map.fetch!(m, "rootfs_path")
+    rootfs_dest = Path.join(node_state_dir, "rootfs.ext4")
+
+    base = %{
+      name: name,
+      backend: @backend_map["cloud-hypervisor"],
+      cloud_hypervisor_bin: Map.fetch!(m, "cloud_hypervisor_bin"),
+      kernel_image_path: Map.fetch!(m, "kernel_image_path"),
+      rootfs_path: rootfs_dest,
+      rootfs_source: rootfs_source,
+      state_dir: node_state_dir
     }
 
     optional_fields =
