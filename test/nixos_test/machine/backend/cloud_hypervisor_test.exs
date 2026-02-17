@@ -16,7 +16,7 @@ defmodule NixosTest.Machine.Backend.CloudHypervisorTest do
       assert {:ok, state} = CloudHypervisor.init(config)
       assert state.name == "test-ch"
       assert state.api_socket_path == "/tmp/ch-test/cloud-hypervisor.sock"
-      assert state.console_socket_path == "/tmp/ch-test/console.sock"
+      assert state.vsock_uds_path == "/tmp/ch-test/v.sock"
     end
 
     test "uses defaults for optional fields" do
@@ -24,6 +24,8 @@ defmodule NixosTest.Machine.Backend.CloudHypervisorTest do
       {:ok, state} = CloudHypervisor.init(config)
       assert state.vcpu_count == 1
       assert state.mem_size_mib == 256
+      assert state.vsock_cid == 3
+      assert state.vsock_port == 1234
     end
   end
 
@@ -100,8 +102,21 @@ defmodule NixosTest.Machine.Backend.CloudHypervisorTest do
       assert config["cpus"]["boot_vcpus"] == 2
       assert config["memory"]["size"] == 512 * 1024 * 1024
       assert hd(config["disks"])["path"] == "/rootfs.ext4"
-      assert config["console"]["mode"] == "Socket"
       assert config["serial"]["mode"] == "Null"
+    end
+
+    test "includes vsock config" do
+      {:ok, state} =
+        CloudHypervisor.init(%{
+          name: "vsock-cfg",
+          kernel_image_path: "/vmlinux",
+          state_dir: "/tmp/ch-vsock-cfg"
+        })
+
+      config = CloudHypervisor.build_vm_config(state)
+
+      assert config["vsock"]["cid"] == 3
+      assert config["vsock"]["socket"] == "/tmp/ch-vsock-cfg/v.sock"
     end
 
     test "omits initramfs when nil" do

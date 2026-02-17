@@ -17,6 +17,14 @@ defmodule NixosTest.Machine.Backend.Firecracker.API do
   end
 
   @doc """
+  Send a PUT request with no body (for endpoints that don't accept one)
+  """
+  @spec put_no_body(String.t(), String.t()) :: :ok | {:error, term()}
+  def put_no_body(socket_path, path) do
+    request(socket_path, "PUT", path, nil)
+  end
+
+  @doc """
   Send a PATCH request with a JSON body
   """
   @spec patch(String.t(), String.t(), map()) :: :ok | {:error, term()}

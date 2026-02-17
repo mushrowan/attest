@@ -3,13 +3,13 @@ defmodule NixosTest.Machine.Backend.CloudHypervisor do
   Cloud Hypervisor backend
 
   Manages cloud-hypervisor microVM lifecycle via its REST API over
-  a unix socket. Uses virtconsole (hvc0) for the shell backdoor,
-  same as QEMU — the console is exposed as a unix socket.
+  a unix socket. Uses vsock for the shell backdoor (same transport
+  as firecracker).
 
   ## Capabilities
 
   No VGA, screenshots, or keyboard simulation. Network block/unblock
-  not yet implemented (needs TAP interface management like firecracker).
+  not yet implemented.
 
   ## Config
 
@@ -17,14 +17,16 @@ defmodule NixosTest.Machine.Backend.CloudHypervisor do
   - `:name` — machine name
   - `:cloud_hypervisor_bin` — path to cloud-hypervisor binary
   - `:kernel_image_path` — path to uncompressed vmlinux
-  - `:rootfs_path` — path to disk image (raw/qcow2)
+  - `:rootfs_path` — path to disk image (raw/ext4)
   - `:state_dir` — working directory for sockets and logs
 
   Optional keys:
   - `:initrd_path` — path to initrd (default: nil)
-  - `:kernel_boot_args` — kernel command line (default: "console=hvc0 reboot=k panic=1")
+  - `:kernel_boot_args` — kernel command line (default: "console=ttyS0 reboot=k panic=1")
   - `:vcpu_count` — number of vCPUs (default: 1)
   - `:mem_size_mib` — memory in MiB (default: 256)
+  - `:vsock_cid` — guest vsock CID (default: 3)
+  - `:vsock_port` — backdoor port (default: 1234)
   """
 
   @behaviour NixosTest.Machine.Backend
@@ -34,7 +36,7 @@ defmodule NixosTest.Machine.Backend.CloudHypervisor do
   # reuse the HTTP/1.1-over-UDS client from firecracker
   alias NixosTest.Machine.Backend.Firecracker.API
   alias NixosTest.Machine.Shell
-  alias NixosTest.Machine.Shell.Transport.VirtConsole
+  alias NixosTest.Machine.Shell.Transport.Vsock
 
   defstruct [
     :name,
@@ -45,15 +47,17 @@ defmodule NixosTest.Machine.Backend.CloudHypervisor do
     :kernel_boot_args,
     :vcpu_count,
     :mem_size_mib,
+    :vsock_cid,
+    :vsock_port,
     :state_dir,
     :api_socket_path,
-    :console_socket_path,
+    :vsock_uds_path,
     :ch_port,
     :shell,
     port_exited: false
   ]
 
-  @default_boot_args "console=hvc0 reboot=k panic=1"
+  @default_boot_args "console=ttyS0 reboot=k panic=1"
 
   # lifecycle
 
@@ -71,9 +75,11 @@ defmodule NixosTest.Machine.Backend.CloudHypervisor do
        kernel_boot_args: Map.get(config, :kernel_boot_args, @default_boot_args),
        vcpu_count: Map.get(config, :vcpu_count, 1),
        mem_size_mib: Map.get(config, :mem_size_mib, 256),
+       vsock_cid: Map.get(config, :vsock_cid, 3),
+       vsock_port: Map.get(config, :vsock_port, 1234),
        state_dir: state_dir,
        api_socket_path: Path.join(state_dir, "cloud-hypervisor.sock"),
-       console_socket_path: Path.join(state_dir, "console.sock")
+       vsock_uds_path: Path.join(state_dir, "v.sock")
      }}
   end
 
@@ -81,29 +87,17 @@ defmodule NixosTest.Machine.Backend.CloudHypervisor do
   def start(state) do
     File.mkdir_p!(state.state_dir)
     File.rm(state.api_socket_path)
-    File.rm(state.console_socket_path)
-
-    # start the console listener before spawning CH
-    # (CH connects TO the socket, so we must be listening first)
-    Logger.info("starting console listener for #{state.name}")
-
-    {:ok, shell} =
-      Shell.start_link(
-        socket_path: state.console_socket_path,
-        transport: VirtConsole,
-        transport_config: %{socket_path: state.console_socket_path}
-      )
+    File.rm(state.vsock_uds_path)
 
     # spawn cloud-hypervisor process
     Logger.info("spawning cloud-hypervisor for #{state.name}")
 
-    cmd =
-      "#{state.cloud_hypervisor_bin} --api-socket #{state.api_socket_path}"
+    cmd = "#{state.cloud_hypervisor_bin} --api-socket #{state.api_socket_path}"
 
     port =
       Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout])
 
-    state = %{state | ch_port: port, shell: shell}
+    state = %{state | ch_port: port}
 
     # wait for API socket
     :ok = wait_for_file(state.api_socket_path, 10_000)
@@ -114,11 +108,23 @@ defmodule NixosTest.Machine.Backend.CloudHypervisor do
     :ok = API.put(state.api_socket_path, "/api/v1/vm.create", vm_config)
 
     Logger.info("booting cloud-hypervisor VM #{state.name}")
-    :ok = API.put(state.api_socket_path, "/api/v1/vm.boot", %{})
+    :ok = API.put_no_body(state.api_socket_path, "/api/v1/vm.boot")
 
-    # wait for shell backdoor connection
-    Logger.info("waiting for shell connection for #{state.name}")
+    # wait for vsock UDS
+    :ok = wait_for_file(state.vsock_uds_path, 30_000)
+
+    # connect shell via vsock
+    Logger.info("connecting shell via vsock for #{state.name}")
+
+    {:ok, shell} =
+      Shell.start_link(
+        socket_path: state.vsock_uds_path,
+        transport: Vsock,
+        transport_config: %{uds_path: state.vsock_uds_path, port: state.vsock_port}
+      )
+
     :ok = Shell.wait_for_connection(shell, 120_000)
+    state = %{state | shell: shell}
 
     {:ok, shell, state}
   end
@@ -148,7 +154,7 @@ defmodule NixosTest.Machine.Backend.CloudHypervisor do
 
     # try power button first, then VMM shutdown
     if File.exists?(state.api_socket_path) do
-      API.put(state.api_socket_path, "/api/v1/vm.power-button", %{})
+      API.put_no_body(state.api_socket_path, "/api/v1/vm.power-button")
     end
 
     case wait_for_process_exit(state, div(timeout, 2)) do
@@ -159,7 +165,7 @@ defmodule NixosTest.Machine.Backend.CloudHypervisor do
       {:error, :timeout} ->
         # force kill via VMM shutdown
         if File.exists?(state.api_socket_path) do
-          API.put(state.api_socket_path, "/api/v1/vmm.shutdown", %{})
+          API.put_no_body(state.api_socket_path, "/api/v1/vmm.shutdown")
         end
 
         case wait_for_process_exit(state, div(timeout, 4)) do
@@ -203,7 +209,7 @@ defmodule NixosTest.Machine.Backend.CloudHypervisor do
     end
 
     File.rm(state.api_socket_path)
-    File.rm(state.console_socket_path)
+    File.rm(state.vsock_uds_path)
 
     :ok
   end
@@ -271,9 +277,10 @@ defmodule NixosTest.Machine.Backend.CloudHypervisor do
         %{"path" => state.rootfs_path}
       ],
       "serial" => %{"mode" => "Null"},
-      "console" => %{
-        "mode" => "Socket",
-        "socket" => state.console_socket_path
+      "console" => %{"mode" => "Off"},
+      "vsock" => %{
+        "cid" => state.vsock_cid,
+        "socket" => state.vsock_uds_path
       }
     }
   end

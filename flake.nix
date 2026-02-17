@@ -169,6 +169,24 @@
                   end
                 '';
               };
+              # cloud-hypervisor make-test smoke test (ext4 rootfs, vmlinux, vsock)
+              cloud-hypervisor-smoke = import ./nix/cloud-hypervisor/make-test.nix {
+                inherit pkgs;
+                nixos-test-ng = nixos-test;
+                name = "ch-smoke";
+                nodes = {
+                  machine = { };
+                };
+                testScript = ''
+                  start_all.()
+                  NixosTest.wait_for_unit(machine, "multi-user.target")
+                  output = NixosTest.succeed(machine, "echo hello-from-cloud-hypervisor")
+
+                  unless String.contains?(output, "hello-from-cloud-hypervisor") do
+                    raise "unexpected output: #{inspect(output)}"
+                  end
+                '';
+              };
             }
           );
 

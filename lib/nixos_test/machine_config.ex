@@ -119,7 +119,9 @@ defmodule NixosTest.MachineConfig do
       kernel_image_path: Map.fetch!(m, "kernel_image_path"),
       rootfs_path: rootfs_dest,
       rootfs_source: rootfs_source,
-      state_dir: node_state_dir
+      state_dir: node_state_dir,
+      vsock_cid: Map.get(m, "vsock_cid", 3),
+      vsock_port: Map.get(m, "vsock_port", 1234)
     }
 
     optional_fields =
