@@ -33,6 +33,10 @@
 - line-buffered TCP recv in shell (large outputs split across TCP segments)
 - `reboot -f -p` for microVM shutdown (no ACPI), parallel teardown in driver
 - railscale integration: module-smoke and policy-reload tests ported to attest
+- TAP + bridge networking for multi-VM firecracker tests (user+net namespace)
+- static IP assignment, /etc/hosts, virtio_net kernel module in test-instrumentation
+- MachineConfig parses tap_interfaces from JSON
+- README and updated ARCHITECTURE.md
 
 ## next
 - ~~rename project to **attest**~~ done
