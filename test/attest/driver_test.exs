@@ -7,7 +7,9 @@ defmodule Attest.DriverTest do
   setup do
     # prevent driver EXIT signals from killing the test process
     Process.flag(:trap_exit, true)
-    :ok
+    # unique suffix to avoid registry collisions between test runs
+    id = :rand.uniform(1_000_000)
+    %{id: id}
   end
 
   describe "VLANs" do
@@ -81,27 +83,27 @@ defmodule Attest.DriverTest do
       GenServer.stop(pid)
     end
 
-    test "creates machines from config" do
+    test "creates machines from config", %{id: id} do
       {:ok, driver} =
-        Driver.start_link(machines: [%{name: "client", backend: Backend.Mock}])
+        Driver.start_link(machines: [%{name: "client-#{id}", backend: Backend.Mock}])
 
-      assert {:ok, machine_pid} = Driver.get_machine(driver, "client")
+      assert {:ok, machine_pid} = Driver.get_machine(driver, "client-#{id}")
       assert Process.alive?(machine_pid)
 
       GenServer.stop(driver)
     end
 
-    test "start_all boots all machines" do
+    test "start_all boots all machines", %{id: id} do
       {:ok, driver} =
         Driver.start_link(
           machines: [
-            %{name: "m1", backend: Backend.Mock},
-            %{name: "m2", backend: Backend.Mock}
+            %{name: "m1-#{id}", backend: Backend.Mock},
+            %{name: "m2-#{id}", backend: Backend.Mock}
           ]
         )
 
-      {:ok, m1} = Driver.get_machine(driver, "m1")
-      {:ok, m2} = Driver.get_machine(driver, "m2")
+      {:ok, m1} = Driver.get_machine(driver, "m1-#{id}")
+      {:ok, m2} = Driver.get_machine(driver, "m2-#{id}")
       refute Attest.Machine.booted?(m1)
       refute Attest.Machine.booted?(m2)
 
@@ -113,12 +115,12 @@ defmodule Attest.DriverTest do
       GenServer.stop(driver)
     end
 
-    test "driver shuts down booted machines gracefully on terminate" do
+    test "driver shuts down booted machines gracefully on terminate", %{id: id} do
       {:ok, driver} =
         Driver.start_link(
           machines: [
-            %{name: "graceful1", backend: Backend.Mock, notify: self()},
-            %{name: "graceful2", backend: Backend.Mock, notify: self()}
+            %{name: "graceful1-#{id}", backend: Backend.Mock, notify: self()},
+            %{name: "graceful2-#{id}", backend: Backend.Mock, notify: self()}
           ]
         )
 
@@ -131,17 +133,17 @@ defmodule Attest.DriverTest do
       assert length(shutdowns) == 2
     end
 
-    test "machines are stopped when driver terminates" do
+    test "machines are stopped when driver terminates", %{id: id} do
       {:ok, driver} =
         Driver.start_link(
           machines: [
-            %{name: "cleanup1", backend: Backend.Mock},
-            %{name: "cleanup2", backend: Backend.Mock}
+            %{name: "cleanup1-#{id}", backend: Backend.Mock},
+            %{name: "cleanup2-#{id}", backend: Backend.Mock}
           ]
         )
 
-      {:ok, m1} = Driver.get_machine(driver, "cleanup1")
-      {:ok, m2} = Driver.get_machine(driver, "cleanup2")
+      {:ok, m1} = Driver.get_machine(driver, "cleanup1-#{id}")
+      {:ok, m2} = Driver.get_machine(driver, "cleanup2-#{id}")
 
       assert Process.alive?(m1)
       assert Process.alive?(m2)

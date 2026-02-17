@@ -6,25 +6,28 @@ defmodule Attest.TestScriptTest do
 
   setup do
     Process.flag(:trap_exit, true)
-    :ok
+    id = :rand.uniform(1_000_000)
+    %{id: id}
   end
 
   describe "eval_string/2" do
-    test "evaluates elixir code with machine bindings" do
+    test "evaluates elixir code with machine bindings", %{id: id} do
+      name = "server_ts_#{id}"
+
       {:ok, driver} =
-        Driver.start_link(machines: [%{name: "server", backend: Backend.Mock}])
+        Driver.start_link(machines: [%{name: name, backend: Backend.Mock}])
 
-      {:ok, machine} = Driver.get_machine(driver, "server")
+      {:ok, machine} = Driver.get_machine(driver, name)
 
-      result = TestScript.eval_string("server", driver)
+      result = TestScript.eval_string("server_ts_#{id}", driver)
       assert result == machine
 
       GenServer.stop(driver)
     end
 
-    test "provides start_all binding" do
+    test "provides start_all binding", %{id: id} do
       {:ok, driver} =
-        Driver.start_link(machines: [%{name: "m1", backend: Backend.Mock}])
+        Driver.start_link(machines: [%{name: "sa_#{id}", backend: Backend.Mock}])
 
       result = TestScript.eval_string("start_all.()", driver)
       assert result == :ok
@@ -32,9 +35,9 @@ defmodule Attest.TestScriptTest do
       GenServer.stop(driver)
     end
 
-    test "provides driver binding" do
+    test "provides driver binding", %{id: id} do
       {:ok, driver} =
-        Driver.start_link(machines: [%{name: "driver-bind", backend: Backend.Mock}])
+        Driver.start_link(machines: [%{name: "db_#{id}", backend: Backend.Mock}])
 
       result = TestScript.eval_string("driver", driver)
       assert result == driver
@@ -42,12 +45,13 @@ defmodule Attest.TestScriptTest do
       GenServer.stop(driver)
     end
 
-    test "has access to Attest module functions" do
-      {:ok, driver} =
-        Driver.start_link(machines: [%{name: "node", backend: Backend.Mock}])
+    test "has access to Attest module functions", %{id: id} do
+      name = "node_#{id}"
 
-      # should be able to call Attest functions
-      result = TestScript.eval_string("Attest.Machine.booted?(node)", driver)
+      {:ok, driver} =
+        Driver.start_link(machines: [%{name: name, backend: Backend.Mock}])
+
+      result = TestScript.eval_string("Attest.Machine.booted?(node_#{id})", driver)
       assert result == false
 
       GenServer.stop(driver)
@@ -55,12 +59,14 @@ defmodule Attest.TestScriptTest do
   end
 
   describe "eval_file/2" do
-    test "evaluates an elixir script file with bindings" do
-      {:ok, driver} =
-        Driver.start_link(machines: [%{name: "web", backend: Backend.Mock}])
+    test "evaluates an elixir script file with bindings", %{id: id} do
+      name = "web_#{id}"
 
-      path = Path.join(System.tmp_dir!(), "test-script-#{:rand.uniform(100_000)}.exs")
-      File.write!(path, "Attest.Machine.booted?(web)")
+      {:ok, driver} =
+        Driver.start_link(machines: [%{name: name, backend: Backend.Mock}])
+
+      path = Path.join(System.tmp_dir!(), "test-script-#{id}.exs")
+      File.write!(path, "Attest.Machine.booted?(web_#{id})")
 
       result = TestScript.eval_file(path, driver)
       assert result == false

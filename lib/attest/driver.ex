@@ -176,8 +176,21 @@ defmodule Attest.Driver do
     end
 
     # gracefully shut down booted machines, then stop processes
-    for {name, pid} <- state.machines || %{} do
-      safe_shutdown(name, pid)
+    # monitor each so we can wait for full cleanup (registry deregistration)
+    refs =
+      for {name, pid} <- state.machines || %{}, Process.alive?(pid) do
+        ref = Process.monitor(pid)
+        safe_shutdown(name, pid)
+        {ref, pid}
+      end
+
+    # wait for all machines to fully terminate (deregister from Registry)
+    for {ref, _pid} <- refs do
+      receive do
+        {:DOWN, ^ref, :process, _, _} -> :ok
+      after
+        10_000 -> :ok
+      end
     end
 
     # cleanup VLANs
@@ -189,16 +202,20 @@ defmodule Attest.Driver do
   end
 
   defp safe_shutdown(name, pid) do
-    if Process.alive?(pid) do
+    try do
       if Attest.Machine.booted?(pid) do
         Logger.info("shutting down machine #{name}")
         Attest.Machine.shutdown(pid, 30_000)
       end
-
-      GenServer.stop(pid, :normal)
+    catch
+      :exit, _ -> :ok
     end
-  catch
-    :exit, _ -> :ok
+
+    try do
+      DynamicSupervisor.terminate_child(Attest.MachineSupervisor, pid)
+    catch
+      :exit, _ -> :ok
+    end
   end
 
   defp safe_stop(pid) do
