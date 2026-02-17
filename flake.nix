@@ -169,6 +169,75 @@
                   end
                 '';
               };
+              # firecracker snapshot/restore test
+              firecracker-snapshot = import ./nix/firecracker/make-test.nix {
+                inherit pkgs;
+                attest = attest;
+                name = "fc-snapshot";
+                nodes = {
+                  machine = { };
+                };
+                testScript = ''
+                  start_all.()
+                  Attest.wait_for_unit(machine, "multi-user.target")
+
+                  # write state before snapshot
+                  Attest.succeed(machine, "echo before-snapshot > /tmp/state.txt")
+
+                  # create snapshot
+                  IO.puts(">>> creating snapshot")
+                  Attest.snapshot_create(machine, "/tmp/attest-snapshot")
+
+                  # restore from snapshot
+                  IO.puts(">>> restoring from snapshot")
+                  t0 = System.monotonic_time(:millisecond)
+                  Attest.snapshot_restore(machine, "/tmp/attest-snapshot")
+                  restore_ms = System.monotonic_time(:millisecond) - t0
+                  IO.puts(">>> restore took #{restore_ms}ms")
+
+                  # verify state survived the snapshot/restore cycle
+                  output = Attest.succeed(machine, "cat /tmp/state.txt")
+
+                  unless String.contains?(output, "before-snapshot") do
+                    raise "state lost after restore: #{inspect(output)}"
+                  end
+
+                  # verify we can still execute commands
+                  output = Attest.succeed(machine, "echo after-restore-ok")
+
+                  unless String.contains?(output, "after-restore-ok") do
+                    raise "post-restore command failed: #{inspect(output)}"
+                  end
+
+                  IO.puts(">>> snapshot/restore test passed (restore: #{restore_ms}ms)")
+                '';
+              };
+              # firecracker split-store smoke test (erofs nix store + minimal rootfs)
+              firecracker-split = import ./nix/firecracker/make-test.nix {
+                inherit pkgs;
+                attest = attest;
+                name = "fc-split";
+                splitStore = true;
+                nodes = {
+                  machine = { };
+                };
+                testScript = ''
+                  start_all.()
+                  Attest.wait_for_unit(machine, "multi-user.target")
+                  output = Attest.succeed(machine, "echo hello-from-split-store")
+
+                  unless String.contains?(output, "hello-from-split-store") do
+                    raise "unexpected output: #{inspect(output)}"
+                  end
+
+                  # verify nix store is an overlay mount
+                  mount_out = Attest.succeed(machine, "mount | grep '/nix/store'")
+
+                  unless String.contains?(mount_out, "overlay") do
+                    raise "nix store not overlay-mounted: #{inspect(mount_out)}"
+                  end
+                '';
+              };
               # cloud-hypervisor make-test smoke test (ext4 rootfs, vmlinux, vsock)
               cloud-hypervisor-smoke = import ./nix/cloud-hypervisor/make-test.nix {
                 inherit pkgs;
@@ -193,6 +262,11 @@
           packages = {
             default = attest;
             inherit attest;
+          }
+          // lib.optionalAttrs pkgs.stdenv.isLinux {
+            bench = import ./nix/bench.nix {
+              inherit pkgs attest;
+            };
           };
 
           devShells.default = import ./nix/devshell.nix {
