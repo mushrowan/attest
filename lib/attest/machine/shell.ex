@@ -133,10 +133,29 @@ defmodule Attest.Machine.Shell do
 
   defp do_execute(socket, command) do
     with :ok <- :gen_tcp.send(socket, format_command(command)),
-         {:ok, output_line} <- :gen_tcp.recv(socket, 0, 900_000),
+         {:ok, output_line} <- recv_line(socket, 900_000),
          :ok <- :gen_tcp.send(socket, "echo ${PIPESTATUS[0]}\n"),
-         {:ok, exit_code_line} <- :gen_tcp.recv(socket, 0, 5000) do
-      parse_output(String.trim_trailing(output_line), exit_code_line)
+         {:ok, exit_code_line} <- recv_line(socket, 5000) do
+      parse_output(output_line, exit_code_line)
+    end
+  end
+
+  # read from socket until we get a complete line (ending with \n)
+  # TCP is a stream protocol so large outputs may arrive in chunks
+  defp recv_line(socket, timeout, acc \\ "") do
+    case :gen_tcp.recv(socket, 0, timeout) do
+      {:ok, data} ->
+        buf = acc <> data
+
+        if String.contains?(buf, "\n") do
+          [line | _rest] = String.split(buf, "\n", parts: 2)
+          {:ok, line}
+        else
+          recv_line(socket, timeout, buf)
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
