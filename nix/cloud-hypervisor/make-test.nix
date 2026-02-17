@@ -4,20 +4,7 @@
 # then runs the test via the elixir driver with backend=cloud-hypervisor.
 # uses vsock for the shell backdoor (same as firecracker)
 #
-# usage:
-#   test = import ./make-test.nix {
-#     inherit pkgs attest;
-#     name = "my-test";
-#     nodes = {
-#       server = { pkgs, ... }: {
-#         services.nginx.enable = true;
-#       };
-#     };
-#     testScript = ''
-#       start_all.()
-#       server |> Attest.wait_for_unit("nginx.service")
-#     '';
-#   };
+# supports splitStore mode (erofs nix store on second drive) for faster boot
 {
   pkgs,
   attest,
@@ -37,6 +24,8 @@
   memSize ? 256,
   # default vCPUs per VM
   vcpuCount ? 1,
+  # use split store (erofs nix store on second drive)
+  splitStore ? false,
 }:
 let
   inherit (pkgs) lib;
@@ -51,34 +40,53 @@ let
         system = pkgs.stdenv.hostPlatform.system;
         configuration = {
           imports = modules ++ [
-            ./test-instrumentation.nix
+            # reuse firecracker's test-instrumentation (same vsock + rootfs approach)
+            # but with virtio_pci instead of virtio_mmio
+            ../firecracker/test-instrumentation.nix
+            {
+              # override: cloud-hypervisor uses PCI, not MMIO
+              boot.initrd.availableKernelModules = lib.mkForce (
+                [
+                  "virtio_pci"
+                  "virtio_blk"
+                  "ext4"
+                ]
+                ++ lib.optionals splitStore [
+                  "erofs"
+                  "overlay"
+                ]
+              );
+              testing.splitStoreImage = splitStore;
+            }
           ];
 
-          # set hostname to node name
           networking.hostName = lib.mkDefault nodeName;
         };
       };
 
       toplevel = nixos.config.system.build.toplevel;
-
-      # vmlinux (uncompressed kernel) lives in the .dev output
       vmlinux = "${nixos.config.boot.kernelPackages.kernel.dev}/vmlinux";
-
-      # initrd for proper NixOS boot (mounts /dev/vda, switch-root)
       initrd = "${nixos.config.system.build.initialRamdisk}/${nixos.config.system.boot.loader.initrdFile}";
-
-      # build kernel boot args from NixOS config + init path
       bootArgs = builtins.concatStringsSep " " (
-        nixos.config.boot.kernelParams
-        ++ [
-          "init=${toplevel}/init"
-        ]
+        nixos.config.boot.kernelParams ++ [ "init=${toplevel}/init" ]
       );
 
-      # build ext4 rootfs image (reuse firecracker's make-rootfs.nix)
-      rootfs = import ../firecracker/make-rootfs.nix {
-        inherit pkgs toplevel;
-        inherit name;
+      rootfs =
+        if splitStore then
+          import ../firecracker/make-rootfs-minimal.nix {
+            inherit pkgs toplevel;
+            inherit name;
+          }
+        else
+          import ../firecracker/make-rootfs.nix {
+            inherit pkgs toplevel;
+            inherit name;
+          };
+
+      storeImage = lib.optionalAttrs splitStore {
+        store = import ../firecracker/make-store-image.nix {
+          inherit pkgs toplevel;
+        };
       };
     in
     {
@@ -90,25 +98,29 @@ let
         bootArgs
         rootfs
         ;
-    };
+    }
+    // storeImage;
 
-  # evaluate all nodes
   evaluatedNodes = lib.mapAttrs evalNode nodes;
 
-  # build machine config list for the driver
-  machines = lib.mapAttrsToList (nodeName: node: {
-    name = nodeName;
-    backend = "cloud-hypervisor";
-    cloud_hypervisor_bin = "${pkgs.cloud-hypervisor}/bin/cloud-hypervisor";
-    kernel_image_path = node.vmlinux;
-    initrd_path = node.initrd;
-    rootfs_path = "${node.rootfs}";
-    kernel_boot_args = node.bootArgs;
-    mem_size_mib = memSize;
-    vcpu_count = vcpuCount;
-  }) evaluatedNodes;
+  machines = lib.mapAttrsToList (
+    nodeName: node:
+    {
+      name = nodeName;
+      backend = "cloud-hypervisor";
+      cloud_hypervisor_bin = "${pkgs.cloud-hypervisor}/bin/cloud-hypervisor";
+      kernel_image_path = node.vmlinux;
+      initrd_path = node.initrd;
+      rootfs_path = "${node.rootfs}";
+      kernel_boot_args = node.bootArgs;
+      mem_size_mib = memSize;
+      vcpu_count = vcpuCount;
+    }
+    // lib.optionalAttrs splitStore {
+      store_image_path = "${node.store}";
+    }
+  ) evaluatedNodes;
 
-  # extract rootfs images for passthru
   rootfsImages = lib.mapAttrs (_: node: node.rootfs) evaluatedNodes;
 
   driver = import ../driver.nix {

@@ -3,10 +3,15 @@
 # builds ext4 rootfs images and extracts vmlinux for each node,
 # then runs the test via the elixir driver with backend=firecracker
 #
+# two rootfs modes:
+# - splitStore=false (default): entire closure in ext4 (simple, ~1.2GB)
+# - splitStore=true: minimal ext4 + erofs nix store (fast, ~350MB)
+#
 # usage:
 #   test = import ./make-test.nix {
 #     inherit pkgs attest;
 #     name = "my-test";
+#     splitStore = true;
 #     nodes = {
 #       server = { pkgs, ... }: {
 #         services.nginx.enable = true;
@@ -36,6 +41,8 @@
   memSize ? 256,
   # default vCPUs per VM
   vcpuCount ? 1,
+  # use split store (erofs nix store on second drive)
+  splitStore ? false,
 }:
 let
   inherit (pkgs) lib;
@@ -53,8 +60,8 @@ let
             ./test-instrumentation.nix
           ];
 
-          # set hostname to node name
           networking.hostName = lib.mkDefault nodeName;
+          testing.splitStoreImage = splitStore;
         };
       };
 
@@ -74,10 +81,24 @@ let
         ]
       );
 
-      # build ext4 rootfs image
-      rootfs = import ./make-rootfs.nix {
-        inherit pkgs toplevel;
-        inherit name;
+      # rootfs depends on mode
+      rootfs =
+        if splitStore then
+          import ./make-rootfs-minimal.nix {
+            inherit pkgs toplevel;
+            inherit name;
+          }
+        else
+          import ./make-rootfs.nix {
+            inherit pkgs toplevel;
+            inherit name;
+          };
+
+      # erofs nix store image (only in split mode)
+      storeImage = lib.optionalAttrs splitStore {
+        store = import ./make-store-image.nix {
+          inherit pkgs toplevel;
+        };
       };
     in
     {
@@ -89,23 +110,30 @@ let
         bootArgs
         rootfs
         ;
-    };
+    }
+    // storeImage;
 
   # evaluate all nodes
   evaluatedNodes = lib.mapAttrs evalNode nodes;
 
   # build machine config list for the driver
-  machines = lib.mapAttrsToList (nodeName: node: {
-    name = nodeName;
-    backend = "firecracker";
-    firecracker_bin = "${pkgs.firecracker}/bin/firecracker";
-    kernel_image_path = node.vmlinux;
-    initrd_path = node.initrd;
-    rootfs_path = "${node.rootfs}";
-    kernel_boot_args = node.bootArgs;
-    mem_size_mib = memSize;
-    vcpu_count = vcpuCount;
-  }) evaluatedNodes;
+  machines = lib.mapAttrsToList (
+    nodeName: node:
+    {
+      name = nodeName;
+      backend = "firecracker";
+      firecracker_bin = "${pkgs.firecracker}/bin/firecracker";
+      kernel_image_path = node.vmlinux;
+      initrd_path = node.initrd;
+      rootfs_path = "${node.rootfs}";
+      kernel_boot_args = node.bootArgs;
+      mem_size_mib = memSize;
+      vcpu_count = vcpuCount;
+    }
+    // lib.optionalAttrs splitStore {
+      store_image_path = "${node.store}";
+    }
+  ) evaluatedNodes;
 
   # extract rootfs images for passthru
   rootfsImages = lib.mapAttrs (_: node: node.rootfs) evaluatedNodes;

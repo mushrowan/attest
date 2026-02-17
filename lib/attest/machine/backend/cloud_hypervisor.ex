@@ -52,6 +52,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
     :state_dir,
     :api_socket_path,
     :vsock_uds_path,
+    :extra_disks,
     :ch_port,
     :shell,
     port_exited: false
@@ -77,6 +78,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
        mem_size_mib: Map.get(config, :mem_size_mib, 256),
        vsock_cid: Map.get(config, :vsock_cid, 3),
        vsock_port: Map.get(config, :vsock_port, 1234),
+       extra_disks: Map.get(config, :extra_disks, []),
        state_dir: state_dir,
        api_socket_path: Path.join(state_dir, "cloud-hypervisor.sock"),
        vsock_uds_path: Path.join(state_dir, "v.sock")
@@ -273,9 +275,11 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
       "memory" => %{
         "size" => state.mem_size_mib * 1024 * 1024
       },
-      "disks" => [
-        %{"path" => state.rootfs_path}
-      ],
+      "disks" =>
+        [%{"path" => state.rootfs_path}] ++
+          Enum.map(state.extra_disks, fn disk ->
+            %{"path" => disk["path"], "readonly" => Map.get(disk, "readonly", false)}
+          end),
       "serial" => %{"mode" => "Null"},
       "console" => %{"mode" => "Off"},
       "vsock" => %{

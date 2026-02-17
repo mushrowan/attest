@@ -2,7 +2,12 @@
 #
 # replaces qemu's test-instrumentation.nix for firecracker VMs.
 # uses vsock backdoor instead of virtconsole, configures the rootfs
-# on /dev/vda, and registers nix store paths on first boot
+# on /dev/vda, and registers nix store paths on first boot.
+#
+# supports two modes:
+# - full rootfs: entire closure in ext4 on /dev/vda (simple, slow)
+# - split store: minimal ext4 on /dev/vda + erofs nix store on /dev/vdb (fast)
+#   set testing.splitStoreImage = true to enable
 {
   config,
   lib,
@@ -15,6 +20,10 @@
     ./vsock-backdoor.nix
   ];
 
+  options.testing.splitStoreImage = lib.mkEnableOption "split nix store image on /dev/vdb" // {
+    default = false;
+  };
+
   config = {
     # vsock backdoor replaces virtconsole shell
     testing.vsockBackdoor = true;
@@ -25,15 +34,36 @@
       fsType = "ext4";
     };
 
+    # erofs nix store on second drive, with overlay for writability
+    fileSystems."/nix/.ro-store" = lib.mkIf config.testing.splitStoreImage {
+      device = "/dev/vdb";
+      fsType = "erofs";
+      options = [ "ro" ];
+      neededForBoot = true;
+    };
+
+    fileSystems."/nix/store" = lib.mkIf config.testing.splitStoreImage {
+      overlay = {
+        lowerdir = [ "/nix/.ro-store" ];
+        upperdir = "/nix/.rw-store/upper";
+        workdir = "/nix/.rw-store/work";
+      };
+      neededForBoot = true;
+    };
+
     # no bootloader — firecracker boots kernel directly
     boot.loader.grub.enable = false;
 
-    # initrd needs virtio drivers to mount /dev/vda
+    # initrd needs virtio drivers to mount /dev/vda (and /dev/vdb for erofs)
     # firecracker uses virtio_mmio (not PCI) for device transport
     boot.initrd.availableKernelModules = [
       "virtio_mmio"
       "virtio_blk"
       "ext4"
+    ]
+    ++ lib.optionals config.testing.splitStoreImage [
+      "erofs"
+      "overlay"
     ];
 
     # kernel params for serial console and crash behaviour
@@ -64,13 +94,15 @@
     '';
 
     # register nix store paths on first boot
-    # the ext4 rootfs includes /nix-path-registration from make-ext4-fs.nix
     boot.postBootCommands = lib.mkIf config.nix.enable ''
       if [ -f /nix-path-registration ]; then
         ${config.nix.package.out}/bin/nix-store --load-db < /nix-path-registration
         rm /nix-path-registration
       fi
     '';
+
+    # no network interfaces — disable dhcpcd (30s timeout otherwise)
+    networking.useDHCP = false;
 
     # prevent internet access in tests
     networking.defaultGateway = lib.mkOverride 150 null;

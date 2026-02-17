@@ -103,7 +103,14 @@ defmodule Attest.MachineConfig do
         end
       end)
 
-    Map.merge(base, optional_fields)
+    # if store_image_path is set, add it as a read-only extra drive
+    extra_drives =
+      case Map.get(m, "store_image_path") do
+        nil -> %{}
+        path -> %{extra_drives: [{"store", path, true}]}
+      end
+
+    base |> Map.merge(optional_fields) |> Map.merge(extra_drives)
   end
 
   defp parse_machine(%{"backend" => "cloud-hypervisor"} = m, state_dir) do
@@ -135,7 +142,13 @@ defmodule Attest.MachineConfig do
         end
       end)
 
-    Map.merge(base, optional_fields)
+    extra_disks =
+      case Map.get(m, "store_image_path") do
+        nil -> %{}
+        path -> %{extra_disks: [%{"path" => path, "readonly" => true}]}
+      end
+
+    base |> Map.merge(optional_fields) |> Map.merge(extra_disks)
   end
 
   defp parse_machine(%{"backend" => backend}, _state_dir) do
