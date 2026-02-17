@@ -95,6 +95,30 @@ defmodule NixosTest do
   end
 
   @doc """
+  Extract text from the current screen via OCR.
+  """
+  @spec get_screen_text(GenServer.server()) :: {:ok, String.t()} | {:error, term()}
+  def get_screen_text(machine) do
+    Machine.get_screen_text(machine)
+  end
+
+  @doc """
+  Extract text from the current screen via OCR with preprocessing variants.
+  """
+  @spec get_screen_text_variants(GenServer.server()) :: {:ok, [String.t()]} | {:error, term()}
+  def get_screen_text_variants(machine) do
+    Machine.get_screen_text_variants(machine)
+  end
+
+  @doc """
+  Wait until screen text matches a regex.
+  """
+  @spec wait_for_text(GenServer.server(), Regex.t(), keyword()) :: :ok | {:error, :timeout}
+  def wait_for_text(machine, regex, opts \\ []) do
+    Machine.wait_for_text(machine, regex, opts)
+  end
+
+  @doc """
   Wait for a port to be open.
   """
   @spec wait_for_open_port(GenServer.server(), non_neg_integer(), keyword()) ::

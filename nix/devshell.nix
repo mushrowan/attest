@@ -22,6 +22,10 @@ pkgs.mkShell {
     # VDE for inter-VM networking (VLANs)
     pkgs.vde2
 
+    # OCR for screenshot text extraction
+    pkgs.tesseract
+    pkgs.imagemagick
+
     # useful tools
     pkgs.jq
     pkgs.curl

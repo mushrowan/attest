@@ -1998,6 +1998,57 @@ defmodule NixosTest.MachineTest do
     end
   end
 
+  describe "get_screen_text/1" do
+    test "returns {:error, :unsupported} when backend has no screenshot" do
+      {:ok, machine} =
+        Machine.start_link(name: "ocr-unsup-test", backend: Backend.Mock)
+
+      :ok = Machine.start(machine)
+
+      assert {:error, :unsupported} = Machine.get_screen_text(machine)
+
+      GenServer.stop(machine)
+    end
+
+    @tag :ocr
+    test "takes screenshot and returns OCR text" do
+      {qmp, machine} = setup_qmp_screenshot_mock("ocr-text-test")
+
+      assert {:ok, text} = Machine.get_screen_text(machine)
+      assert is_binary(text)
+
+      GenServer.stop(machine)
+      GenServer.stop(qmp)
+    end
+  end
+
+  describe "get_screen_text_variants/1" do
+    @tag :ocr
+    test "returns list of OCR text variants" do
+      {qmp, machine} = setup_qmp_screenshot_mock("ocr-variants-test")
+
+      assert {:ok, variants} = Machine.get_screen_text_variants(machine)
+      assert is_list(variants)
+      assert length(variants) == 3
+
+      GenServer.stop(machine)
+      GenServer.stop(qmp)
+    end
+  end
+
+  describe "wait_for_text/3" do
+    test "returns timeout when backend unsupported" do
+      {:ok, machine} =
+        Machine.start_link(name: "wait-text-unsup", backend: Backend.Mock)
+
+      :ok = Machine.start(machine)
+
+      assert {:error, :timeout} = Machine.wait_for_text(machine, ~r/hello/, timeout: 1_000)
+
+      GenServer.stop(machine)
+    end
+  end
+
   describe "sleep/2" do
     test "pauses for the given duration in seconds" do
       {:ok, machine} =
@@ -2009,6 +2060,66 @@ defmodule NixosTest.MachineTest do
 
       assert elapsed >= 90
       GenServer.stop(machine)
+    end
+  end
+
+  # helper: creates a QMP mock that writes a tiny PPM on screendump
+  defp setup_qmp_screenshot_mock(name) do
+    socket_path = Path.join(System.tmp_dir!(), "qmp-ocr-#{name}-#{:rand.uniform(100_000)}.sock")
+    File.rm(socket_path)
+
+    # tiny 4x4 white PPM
+    ppm = "P6\n4 4\n255\n" <> :binary.copy(<<255, 255, 255>>, 16)
+
+    {:ok, listen} =
+      :gen_tcp.listen(0, [
+        :binary,
+        {:packet, :line},
+        {:active, false},
+        {:ip, {:local, socket_path}}
+      ])
+
+    spawn(fn ->
+      {:ok, client} = :gen_tcp.accept(listen)
+
+      :ok =
+        :gen_tcp.send(
+          client,
+          ~s({"QMP": {"version": {"qemu": {"major": 8}}, "capabilities": []}}\n)
+        )
+
+      # capabilities negotiation
+      {:ok, _} = :gen_tcp.recv(client, 0, 5000)
+      :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+      # serve screendump commands in a loop
+      serve_screendump(client, ppm)
+    end)
+
+    {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+    {:ok, machine} = Machine.start_link(name: name, backend: Backend.Mock, qmp: qmp)
+    :ok = Machine.start(machine)
+
+    {qmp, machine}
+  end
+
+  defp serve_screendump(client, ppm) do
+    case :gen_tcp.recv(client, 0, 60_000) do
+      {:ok, cmd} ->
+        # extract filename from screendump command and write PPM
+        case Jason.decode(cmd) do
+          {:ok, %{"arguments" => %{"filename" => filename}}} ->
+            File.write!(filename, ppm)
+
+          _ ->
+            :ok
+        end
+
+        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+        serve_screendump(client, ppm)
+
+      {:error, _} ->
+        :ok
     end
   end
 end

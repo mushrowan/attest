@@ -15,7 +15,7 @@ defmodule NixosTest.Machine do
 
   require Logger
 
-  alias NixosTest.Machine.Shell
+  alias NixosTest.Machine.{OCR, Shell}
 
   defstruct [
     :name,
@@ -586,6 +586,65 @@ defmodule NixosTest.Machine do
   end
 
   @doc """
+  Extract text from the current screen via OCR
+
+  Takes a screenshot, runs tesseract, returns the extracted text.
+  Requires tesseract to be available on PATH.
+  """
+  @spec get_screen_text(GenServer.server()) :: {:ok, String.t()} | {:error, term()}
+  def get_screen_text(machine) do
+    GenServer.call(machine, :get_screen_text, 60_000)
+  end
+
+  @doc """
+  Extract text from the current screen via OCR with preprocessing variants
+
+  Takes a screenshot, runs tesseract on raw + preprocessed variants.
+  Returns a list of three text strings for better detection coverage.
+  Requires tesseract and imagemagick to be available on PATH.
+  """
+  @spec get_screen_text_variants(GenServer.server()) :: {:ok, [String.t()]} | {:error, term()}
+  def get_screen_text_variants(machine) do
+    GenServer.call(machine, :get_screen_text_variants, 60_000)
+  end
+
+  @doc """
+  Wait until screen text matches a regex
+
+  Polls `get_screen_text_variants/1` until any variant matches.
+
+  ## Options
+
+  - `:timeout` — max wait time in ms (default: 900_000)
+  """
+  @spec wait_for_text(GenServer.server(), Regex.t(), keyword()) :: :ok | {:error, :timeout}
+  def wait_for_text(machine, regex, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 900_000)
+    deadline = System.monotonic_time(:millisecond) + timeout
+    do_wait_for_text(machine, regex, deadline)
+  end
+
+  defp do_wait_for_text(machine, regex, deadline) do
+    if System.monotonic_time(:millisecond) >= deadline do
+      {:error, :timeout}
+    else
+      case get_screen_text_variants(machine) do
+        {:ok, variants} ->
+          if Enum.any?(variants, &Regex.match?(regex, &1)) do
+            :ok
+          else
+            Process.sleep(1_000)
+            do_wait_for_text(machine, regex, deadline)
+          end
+
+        {:error, _reason} ->
+          Process.sleep(1_000)
+          do_wait_for_text(machine, regex, deadline)
+      end
+    end
+  end
+
+  @doc """
   Send a key combination to the VM (e.g. "ctrl-alt-delete", "ret")
   """
   @spec send_key(GenServer.server(), String.t()) :: :ok | {:error, term()}
@@ -797,6 +856,18 @@ defmodule NixosTest.Machine do
   end
 
   @impl true
+  def handle_call(:get_screen_text, _from, state) do
+    result = do_ocr(state, &OCR.perform_ocr/1)
+    {:reply, result, state}
+  end
+
+  @impl true
+  def handle_call(:get_screen_text_variants, _from, state) do
+    result = do_ocr(state, &OCR.perform_ocr_variants/1)
+    {:reply, result, state}
+  end
+
+  @impl true
   def handle_call({:send_key, key}, _from, state) do
     Logger.info("sending key #{key} to #{state.name}")
     result = state.backend_mod.send_key(state.backend_state, key)
@@ -964,6 +1035,24 @@ defmodule NixosTest.Machine do
 
       {:error, reason} ->
         {:error, {:shell_error, reason}}
+    end
+  end
+
+  # take a temporary screenshot and run an OCR function on it
+  defp do_ocr(state, ocr_fn) do
+    tmp = Path.join(System.tmp_dir!(), "ocr-#{state.name}-#{:rand.uniform(100_000)}.ppm")
+
+    case state.backend_mod.screenshot(state.backend_state, tmp) do
+      :ok ->
+        result = ocr_fn.(tmp)
+        File.rm(tmp)
+        result
+
+      {:error, :unsupported} ->
+        {:error, :unsupported}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 end
