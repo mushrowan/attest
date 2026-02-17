@@ -7,6 +7,12 @@
 # - splitStore=false (default): entire closure in ext4 (simple, ~1.2GB)
 # - splitStore=true: minimal ext4 + erofs nix store (fast, ~350MB)
 #
+# networking:
+# - when vlans is non-empty (or enableNetwork=true), creates a bridge per
+#   vlan and a TAP interface per node. IPs are 192.168.{vlan}.{nodeNumber}
+# - node numbers are assigned alphabetically starting from 1
+# - /etc/hosts is populated so nodes can reach each other by hostname
+#
 # usage:
 #   test = import ./make-test.nix {
 #     inherit pkgs attest;
@@ -31,8 +37,10 @@
   nodes,
   # elixir test script string
   testScript,
-  # list of VLAN numbers
+  # list of VLAN numbers (non-empty enables networking)
   vlans ? [ ],
+  # enable networking even without explicit VLANs (uses VLAN 1)
+  enableNetwork ? false,
   # global timeout in seconds
   globalTimeout ? 3600,
   # extra CLI args passed to the driver
@@ -47,11 +55,64 @@
 let
   inherit (pkgs) lib;
 
+  # resolve effective VLANs: if enableNetwork or multi-node, default to [1]
+  effectiveVlans =
+    if vlans != [] then vlans
+    else if enableNetwork || (builtins.length (builtins.attrNames nodes)) > 1 then [ 1 ]
+    else [];
+
+  hasNetwork = effectiveVlans != [];
+
+  # sorted node names for deterministic number assignment
+  sortedNames = lib.sort (a: b: a < b) (builtins.attrNames nodes);
+
+  # node number: alphabetically sorted, 1-indexed
+  nodeNumbers = lib.listToAttrs (
+    lib.imap1 (idx: name: lib.nameValuePair name idx) sortedNames
+  );
+
+  # generate a deterministic MAC address: AA:FC:00:{vlan}:{nodeNum}:01
+  macAddress = vlan: nodeNum:
+    let
+      hex = n: lib.toLower (lib.fixedWidthString 2 "0" (lib.toHexString n));
+    in
+    "AA:FC:00:${hex vlan}:${hex nodeNum}:01";
+
+  # TAP device name: tap-{testname}-{nodename}-{vlan} (max 15 chars for IFNR)
+  # use a short hash to stay within limits
+  tapName = nodeName: vlan:
+    let
+      raw = "t${builtins.substring 0 4 name}${builtins.substring 0 4 nodeName}${toString vlan}";
+    in
+    builtins.substring 0 15 raw;
+
+  # bridge name per vlan
+  bridgeName = vlan: builtins.substring 0 15 "br${builtins.substring 0 4 name}${toString vlan}";
+
+  # /etc/hosts entries: all nodes on all VLANs
+  hostsEntries = lib.concatStringsSep "\n" (
+    lib.concatMap (nodeName:
+      let num = nodeNumbers.${nodeName}; in
+      map (vlan:
+        "192.168.${toString vlan}.${toString num} ${nodeName}"
+      ) effectiveVlans
+    ) sortedNames
+  );
+
+  # build TAP interface list for a node: [{iface_id, host_dev_name, guest_mac}]
+  nodeTaps = nodeName:
+    lib.imap0 (idx: vlan: {
+      iface_id = "eth${toString idx}";
+      host_dev_name = tapName nodeName vlan;
+      guest_mac = macAddress vlan (nodeNumbers.${nodeName});
+    }) effectiveVlans;
+
   # evaluate a NixOS config for firecracker
   evalNode =
     nodeName: nodeConfig:
     let
       modules = if builtins.isList nodeConfig then nodeConfig else [ nodeConfig ];
+      nodeNum = nodeNumbers.${nodeName};
 
       nixos = import "${pkgs.path}/nixos" {
         system = pkgs.stdenv.hostPlatform.system;
@@ -62,39 +123,31 @@ let
 
           networking.hostName = lib.mkDefault nodeName;
           testing.splitStoreImage = splitStore;
+          testing.nodeNumber = nodeNum;
+          testing.vlans = effectiveVlans;
+          testing.hostsEntries = hostsEntries;
         };
       };
 
       toplevel = nixos.config.system.build.toplevel;
-
-      # vmlinux (uncompressed kernel) lives in the .dev output
       vmlinux = "${nixos.config.boot.kernelPackages.kernel.dev}/vmlinux";
-
-      # initrd for proper NixOS boot (mounts /dev/vda, switch-root)
       initrd = "${nixos.config.system.build.initialRamdisk}/${nixos.config.system.boot.loader.initrdFile}";
 
-      # build kernel boot args from NixOS config + init path
       bootArgs = builtins.concatStringsSep " " (
         nixos.config.boot.kernelParams
-        ++ [
-          "init=${toplevel}/init"
-        ]
+        ++ [ "init=${toplevel}/init" ]
       );
 
-      # rootfs depends on mode
       rootfs =
         if splitStore then
           import ./make-rootfs-minimal.nix {
-            inherit pkgs toplevel;
-            inherit name;
+            inherit pkgs toplevel name;
           }
         else
           import ./make-rootfs.nix {
-            inherit pkgs toplevel;
-            inherit name;
+            inherit pkgs toplevel name;
           };
 
-      # erofs nix store image (only in split mode)
       storeImage = lib.optionalAttrs splitStore {
         store = import ./make-store-image.nix {
           inherit pkgs toplevel;
@@ -103,13 +156,7 @@ let
     in
     {
       config = nixos.config;
-      inherit
-        toplevel
-        vmlinux
-        initrd
-        bootArgs
-        rootfs
-        ;
+      inherit toplevel vmlinux initrd bootArgs rootfs;
     }
     // storeImage;
 
@@ -133,26 +180,50 @@ let
     // lib.optionalAttrs splitStore {
       store_image_path = "${node.store}";
     }
+    // lib.optionalAttrs hasNetwork {
+      tap_interfaces = map (t: [t.iface_id t.host_dev_name t.guest_mac]) (nodeTaps nodeName);
+    }
   ) evaluatedNodes;
 
-  # extract rootfs images for passthru
+  # network setup script: create bridges and TAPs before VMs boot
+  networkSetupScript = lib.optionalString hasNetwork ''
+    # create bridges
+    ${lib.concatMapStringsSep "\n" (vlan: ''
+      ip link add ${bridgeName vlan} type bridge
+      ip link set ${bridgeName vlan} up
+      ip addr add 192.168.${toString vlan}.254/24 dev ${bridgeName vlan}
+    '') effectiveVlans}
+
+    # create TAP devices and attach to bridges
+    ${lib.concatMapStringsSep "\n" (nodeName:
+      lib.concatMapStringsSep "\n" (vlan:
+        let tap = tapName nodeName vlan; in ''
+          ip tuntap add ${tap} mode tap
+          ip link set ${tap} master ${bridgeName vlan}
+          ip link set ${tap} up
+        ''
+      ) effectiveVlans
+    ) sortedNames}
+  '';
+
   rootfsImages = lib.mapAttrs (_: node: node.rootfs) evaluatedNodes;
 
   driver = import ../driver.nix {
     inherit
       pkgs
       attest
-      vlans
       globalTimeout
       extraDriverArgs
       name
       machines
       ;
+    vlans = [];  # VDE vlans not used with firecracker networking
     inherit testScript;
   };
 
   test = import ../run.nix {
     inherit pkgs driver name;
+    preScript = networkSetupScript;
   };
 in
 test

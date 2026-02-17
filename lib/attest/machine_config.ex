@@ -110,7 +110,21 @@ defmodule Attest.MachineConfig do
         path -> %{extra_drives: [{"store", path, true}]}
       end
 
-    base |> Map.merge(optional_fields) |> Map.merge(extra_drives)
+    # TAP interfaces: [[iface_id, host_dev_name, guest_mac], ...]
+    tap_interfaces =
+      case Map.get(m, "tap_interfaces") do
+        nil ->
+          %{}
+
+        taps when is_list(taps) ->
+          parsed = Enum.map(taps, fn [id, dev, mac] -> {id, dev, mac} end)
+          %{tap_interfaces: parsed}
+      end
+
+    base
+    |> Map.merge(optional_fields)
+    |> Map.merge(extra_drives)
+    |> Map.merge(tap_interfaces)
   end
 
   defp parse_machine(%{"backend" => "cloud-hypervisor"} = m, state_dir) do

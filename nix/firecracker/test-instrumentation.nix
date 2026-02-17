@@ -20,8 +20,28 @@
     ./vsock-backdoor.nix
   ];
 
-  options.testing.splitStoreImage = lib.mkEnableOption "split nix store image on /dev/vdb" // {
-    default = false;
+  options.testing = {
+    splitStoreImage = lib.mkEnableOption "split nix store image on /dev/vdb" // {
+      default = false;
+    };
+
+    nodeNumber = lib.mkOption {
+      type = lib.types.int;
+      default = 1;
+      description = "node number for IP assignment (192.168.1.{nodeNumber})";
+    };
+
+    vlans = lib.mkOption {
+      type = lib.types.listOf lib.types.int;
+      default = [];
+      description = "VLAN numbers this node is attached to";
+    };
+
+    hostsEntries = lib.mkOption {
+      type = lib.types.lines;
+      default = "";
+      description = "extra /etc/hosts entries for inter-VM name resolution";
+    };
   };
 
   config = {
@@ -64,6 +84,9 @@
     ++ lib.optionals config.testing.splitStoreImage [
       "erofs"
       "overlay"
+    ]
+    ++ lib.optionals (config.testing.vlans != []) [
+      "virtio_net"
     ];
 
     # kernel params for serial console and crash behaviour
@@ -101,8 +124,23 @@
       fi
     '';
 
-    # no network interfaces — disable dhcpcd (30s timeout otherwise)
+    # disable dhcpcd — we use static IPs (dhcpcd waits 30s with no DHCP server)
     networking.useDHCP = false;
+
+    # static IP per VLAN: 192.168.{vlan}.{nodeNumber}/24
+    networking.interfaces = lib.mkIf (config.testing.vlans != []) (
+      lib.listToAttrs (lib.imap0 (idx: vlan:
+        lib.nameValuePair "eth${toString idx}" {
+          ipv4.addresses = [{
+            address = "192.168.${toString vlan}.${toString config.testing.nodeNumber}";
+            prefixLength = 24;
+          }];
+        }
+      ) config.testing.vlans)
+    );
+
+    # hostname resolution for all nodes
+    networking.extraHosts = lib.mkIf (config.testing.hostsEntries != "") config.testing.hostsEntries;
 
     # prevent internet access in tests
     networking.defaultGateway = lib.mkOverride 150 null;
