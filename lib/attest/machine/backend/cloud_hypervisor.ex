@@ -140,7 +140,8 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
   def shutdown(%{shell: shell} = state, timeout) do
     Logger.info("shutting down #{state.name}")
 
-    case Shell.execute(shell, "poweroff") do
+    # reboot -f -p: force immediate power-off (no ACPI needed)
+    case Shell.execute(shell, "reboot -f -p") do
       {:ok, _, _} -> :ok
       {:error, _} -> :ok
     end

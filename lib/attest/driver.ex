@@ -175,21 +175,23 @@ defmodule Attest.Driver do
       Process.cancel_timer(state.timeout_ref)
     end
 
-    # gracefully shut down booted machines, then stop processes
-    # monitor each so we can wait for full cleanup (registry deregistration)
+    # shut down all machines in parallel, then wait for full cleanup
+    machines = for {name, pid} <- state.machines || %{}, Process.alive?(pid), do: {name, pid}
+
     refs =
-      for {name, pid} <- state.machines || %{}, Process.alive?(pid) do
+      Enum.map(machines, fn {name, pid} ->
         ref = Process.monitor(pid)
-        safe_shutdown(name, pid)
+        # spawn shutdown so all happen concurrently
+        Task.start(fn -> safe_shutdown(name, pid) end)
         {ref, pid}
-      end
+      end)
 
     # wait for all machines to fully terminate (deregister from Registry)
     for {ref, _pid} <- refs do
       receive do
         {:DOWN, ^ref, :process, _, _} -> :ok
       after
-        10_000 -> :ok
+        30_000 -> :ok
       end
     end
 
