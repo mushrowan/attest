@@ -2,7 +2,7 @@
 
 ## status
 
-207 tests, `nix flake check` green
+208 tests, `nix flake check` green
 
 ### what's built
 - Machine GenServer with Backend behaviour (14 callbacks)
@@ -21,15 +21,12 @@
 - vsock transport retry on closed/econnrefused during guest boot
 - OCR module: tesseract + imagemagick preprocessing, 3 parallel variants
 - Machine: get_screen_text, get_screen_text_variants, wait_for_text
-- Backend.CloudHypervisor: REST API lifecycle, virtconsole shell, MachineConfig parser
+- Backend.CloudHypervisor: REST API lifecycle, vsock shell, MachineConfig parser
+- cloud-hypervisor nix integration: test-instrumentation.nix (reuses vsock-backdoor), make-test.nix
+- cloud-hypervisor smoke test passing in `nix flake check` (boot, execute, shutdown)
+- API.put_no_body/2 for bodyless PUT endpoints (cloud-hypervisor rejects empty {})
 
 ## next
-
-### cloud-hypervisor nix integration
-- make-test.nix for cloud-hypervisor (similar to firecracker)
-- smoke test in flake.nix
-
-### other
 - rename project to **attest**
 - test DSL as alternative to raw elixir scripts
 - in-guest screenshots via xvfb + imagemagick (non-QEMU backends)
