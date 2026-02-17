@@ -238,6 +238,48 @@
                   end
                 '';
               };
+              # firecracker multi-VM networking test (bridge + TAP)
+              firecracker-network = import ./nix/firecracker/make-test.nix {
+                inherit pkgs;
+                attest = attest;
+                name = "fc-net";
+                splitStore = true;
+                enableNetwork = true;
+                nodes = {
+                  alice = { pkgs, ... }: {
+                    environment.systemPackages = [ pkgs.iputils ];
+                  };
+                  bob = { pkgs, ... }: {
+                    environment.systemPackages = [ pkgs.iputils ];
+                  };
+                };
+                testScript = ''
+                  start_all.()
+
+                  # verify both VMs have IPs
+                  alice_ip = Attest.succeed(alice, "ip -4 addr show eth0 | grep inet")
+                  IO.puts("alice: #{String.trim(alice_ip)}")
+                  unless String.contains?(alice_ip, "192.168.1.1"), do: raise("alice should be .1")
+
+                  bob_ip = Attest.succeed(bob, "ip -4 addr show eth0 | grep inet")
+                  IO.puts("bob: #{String.trim(bob_ip)}")
+                  unless String.contains?(bob_ip, "192.168.1.2"), do: raise("bob should be .2")
+
+                  # ping each other
+                  Attest.succeed(alice, "ping -c 1 -W 3 192.168.1.2")
+                  IO.puts("alice -> bob: ok")
+                  Attest.succeed(bob, "ping -c 1 -W 3 192.168.1.1")
+                  IO.puts("bob -> alice: ok")
+
+                  # hostname resolution via /etc/hosts
+                  Attest.succeed(alice, "ping -c 1 -W 3 bob")
+                  IO.puts("alice -> bob (hostname): ok")
+                  Attest.succeed(bob, "ping -c 1 -W 3 alice")
+                  IO.puts("bob -> alice (hostname): ok")
+
+                  IO.puts("network test passed!")
+                '';
+              };
               # cloud-hypervisor make-test smoke test (ext4 rootfs, vmlinux, vsock)
               cloud-hypervisor-smoke = import ./nix/cloud-hypervisor/make-test.nix {
                 inherit pkgs;
