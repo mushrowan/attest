@@ -38,6 +38,7 @@
 - MachineConfig parses tap_interfaces from JSON
 - cloud-hypervisor networking: same bridge+TAP approach, block/unblock via ip link
 - cloud-hypervisor network integration test (alice + bob ping by IP and hostname)
+- railscale cli-integration-attest: full parity with python suite (STUN, cross-user taildrop, ephemeral/reusable json, user delete constraint, rate limit headers, lock json, etc)
 - README and updated ARCHITECTURE.md
 
 ## next
