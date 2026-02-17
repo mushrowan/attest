@@ -2,7 +2,7 @@
 
 ## status
 
-208 tests, `nix flake check` green
+208 tests, `nix flake check` green, 0 flaky tests (was ~20% failure rate)
 
 ### what's built
 - Machine GenServer with Backend behaviour (14 callbacks)
@@ -25,6 +25,11 @@
 - cloud-hypervisor nix integration: test-instrumentation.nix (reuses vsock-backdoor), make-test.nix
 - cloud-hypervisor smoke test passing in `nix flake check` (boot, execute, shutdown)
 - API.put_no_body/2 for bodyless PUT endpoints (cloud-hypervisor rejects empty {})
+- split store: erofs nix store image + minimal ext4 rootfs (fc 35s→5.4s, ch 36s→4.4s)
+- dhcpcd disabled in test VMs (was 30s timeout with no network)
+- firecracker snapshot/restore integration test (84ms restore)
+- `nix build .#bench` — backend benchmark (qemu, fc, ch, fc-snapshot)
+- flaky test fix: unique machine names + synchronous terminate cleanup
 
 ## next
 - ~~rename project to **attest**~~ done
