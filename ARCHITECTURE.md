@@ -42,11 +42,10 @@ Machine GenServer (public API)
 ├── execute, wait_for_unit, wait_for_open_port (shell-based)
 ├── start, shutdown, halt, screenshot (delegated to backend)
 └── delegates to Backend behaviour
-    ├── Backend.QEMU        — Port.open, QMP, virtconsole shell
-    ├── Backend.Firecracker — REST API, vsock shell, TAP networking
-    ├── Backend.Mock        — injected pids for unit tests
-    └── (future)
-        └── Backend.CloudHypervisor — REST API, virtconsole
+    ├── Backend.QEMU            — Port.open, QMP, virtconsole shell
+    ├── Backend.Firecracker     — REST API, vsock shell, TAP networking
+    ├── Backend.CloudHypervisor — REST API, vsock shell, TAP networking
+    └── Backend.Mock            — injected pids for unit tests
 
 Shell GenServer (command protocol)
 └── delegates connection to Transport behaviour
@@ -170,11 +169,50 @@ coordinates test execution. creates machines via MachineSupervisor,
 provides `start_all/1` for parallel boot, `get_machine/2` for
 lookup. handles global timeout.
 
+## networking
+
+multi-VM tests use TAP devices on a linux bridge, created inside a
+user+network namespace (no real root needed). the nix test runner:
+
+1. calls `unshare --user --map-root-user --net` for a fresh namespace
+2. creates a bridge per VLAN (`br{test}{vlan}`)
+3. creates TAP devices per node per VLAN (`t{test}{node}{vlan}`)
+4. attaches TAPs to bridges, brings everything up
+5. runs the attest driver, which passes TAP names to firecracker via API
+
+inside the guest, static IPs are assigned via test-instrumentation.nix:
+`192.168.{vlan}.{nodeNumber}` where nodeNumber is alphabetical (1-indexed).
+`/etc/hosts` is populated so nodes can reach each other by hostname.
+
+requires `/dev/net/tun` in the nix sandbox:
+```nix
+nix.settings.extra-sandbox-paths = [ "/dev/net/tun" ];
+```
+
+QEMU tests use VDE switches (userspace) and don't need this.
+
+## nix integration
+
+```
+nix/
+├── driver.nix                # wraps escript with JSON config + test script
+├── run.nix                   # executes driver in sandbox (+ network namespace)
+├── make-test.nix             # QEMU: evaluates NixOS configs, builds VMs
+├── firecracker/
+│   ├── make-test.nix         # FC: evaluates configs, builds rootfs + vmlinux
+│   ├── make-rootfs.nix       # full ext4 rootfs (~1.2GB)
+│   ├── make-rootfs-minimal.nix  # mutable-only ext4 (~10MB) for split store
+│   ├── make-store-image.nix  # compressed erofs /nix/store image
+│   ├── test-instrumentation.nix  # vsock backdoor, static IPs, kernel modules
+│   └── vsock-backdoor.nix    # systemd service for shell over vsock
+├── cloud-hypervisor/
+│   └── make-test.nix         # CH: reuses FC rootfs/store, PCI transport
+└── bench.nix                 # backend comparison benchmark
+```
+
 ## future work
 
-- snapshot/restore for "boot once, fork many" test execution (~50-150ms restore)
-- `Network` behaviour — TAP + bridge networking for multi-VM tests
-- `Backend.CloudHypervisor` — REST API, virtconsole shell
+- test DSL / syntactic sugar over raw elixir scripts
+- extract shared API module (used by both firecracker and cloud-hypervisor)
+- cloud-hypervisor snapshot support
 - in-guest screenshots via xvfb + imagemagick (non-QEMU backends)
-- firecracker nix integration (vmlinux + ext4 rootfs + vsock backdoor service)
-- test DSL / nix module for declarative test definitions
