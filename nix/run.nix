@@ -15,7 +15,7 @@
   # the wrapped driver from driver.nix
   driver,
   # test name
-  name ? "nixos-test-ng",
+  name ? "attest",
 }:
 pkgs.runCommand "vm-test-run-${name}"
   {
@@ -23,7 +23,7 @@ pkgs.runCommand "vm-test-run-${name}"
       "nixos-test"
       "kvm"
     ];
-    meta.mainProgram = "nixos-test-driver";
+    meta.mainProgram = "attest-driver";
     passthru = {
       inherit driver;
     };
@@ -32,5 +32,5 @@ pkgs.runCommand "vm-test-run-${name}"
     mkdir -p $out
     export HOME=$TMPDIR
 
-    ${driver}/bin/nixos-test-driver -o $out
+    ${driver}/bin/attest-driver -o $out
   ''

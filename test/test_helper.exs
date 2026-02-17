@@ -1,4 +1,4 @@
-Application.ensure_all_started(:nixos_test)
+Application.ensure_all_started(:attest)
 
 # skip :ocr tests when tesseract/imagemagick aren't installed
 exclude =

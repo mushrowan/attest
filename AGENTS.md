@@ -12,7 +12,7 @@ STOP after step 3 and notify user that progress log is updated.
 
 **Rules**: If stuck after 2 attempts, ask user.
 
-# nixos-test-ng - NixOS Test Driver in Elixir
+# attest - NixOS Test Driver in Elixir
 
 OTP-based reimplementation of the NixOS test driver, leveraging supervision trees for VM lifecycle management.
 
@@ -20,8 +20,8 @@ OTP-based reimplementation of the NixOS test driver, leveraging supervision tree
 
 ```
 lib/
-├── nixos_test.ex              # main API
-├── nixos_test/
+├── attest.ex                  # main API
+├── attest/
 │   ├── application.ex         # OTP application, supervisors
 │   ├── cli.ex                 # escript CLI
 │   ├── driver.ex              # test coordinator GenServer

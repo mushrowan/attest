@@ -1,4 +1,4 @@
-# nixos-test-ng: elixir-based nixos test driver
+# attest: elixir-based nixos test driver
 
 ## why elixir?
 
@@ -18,7 +18,7 @@ elixir/OTP is almost purpose-built for this problem:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Application Supervisor                        │
-│                  (NixosTest.Application)                        │
+│                  (Attest.Application)                        │
 └─────────────────────────────────────────────────────────────────┘
                               │
           ┌───────────────────┼──────────────────┐
@@ -57,7 +57,7 @@ Shell GenServer (command protocol)
 ## file structure
 
 ```
-lib/nixos_test/
+lib/attest/
 ├── application.ex                   # OTP app, supervisors
 ├── cli.ex                           # escript CLI (eval, eval-file)
 ├── driver.ex                        # test coordinator GenServer

@@ -7,20 +7,20 @@
 # usage:
 #   driver = import ./driver.nix {
 #     inherit pkgs;
-#     nixos-test-ng = self'.packages.nixos-test;
+#     attest = self'.packages.attest;
 #     machines = [
 #       { name = "server"; backend = "qemu"; start_command = "${serverVM}/bin/run-server-vm"; }
 #       { name = "client"; backend = "qemu"; start_command = "${clientVM}/bin/run-client-vm"; }
 #     ];
 #     testScript = ''
 #       start_all.()
-#       server |> NixosTest.wait_for_unit("nginx.service")
+#       server |> Attest.wait_for_unit("nginx.service")
 #     '';
 #     vlans = [ 1 ];
 #   };
 {
   pkgs,
-  nixos-test-ng,
+  attest,
   # list of machine config attrsets (see MachineConfig for schema)
   machines,
   # elixir test script string
@@ -32,7 +32,7 @@
   # extra CLI args
   extraDriverArgs ? [ ],
   # test name for the derivation
-  name ? "nixos-test-ng",
+  name ? "attest",
 }:
 let
   inherit (pkgs) lib;
@@ -46,13 +46,13 @@ let
 
   machineConfigFile = pkgs.writeText "machine-config-${name}.json" machineConfigJson;
 in
-pkgs.runCommand "nixos-test-driver-${name}"
+pkgs.runCommand "attest-driver-${name}"
   {
     nativeBuildInputs = [ pkgs.makeWrapper ];
     passthru = {
       inherit machines;
     };
-    meta.mainProgram = "nixos-test-driver";
+    meta.mainProgram = "attest-driver";
   }
   ''
     mkdir -p $out/bin
@@ -63,7 +63,7 @@ pkgs.runCommand "nixos-test-driver-${name}"
     ELIXIR_SCRIPT
 
     # create wrapper with JSON machine config
-    makeWrapper ${nixos-test-ng}/bin/nixos-test $out/bin/nixos-test-driver \
+    makeWrapper ${attest}/bin/attest $out/bin/attest-driver \
       --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.vde2 ]} \
       --set machineConfig "${machineConfigFile}" \
       --set testScript "$out/test-script.exs" \

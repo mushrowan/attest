@@ -1,15 +1,15 @@
-# nixos-test package build using mixRelease
+# attest package build using mixRelease
 #
 # usage:
 #   packageSet = import ./package.nix { inherit pkgs beamPackages elixir; };
-#   inherit (packageSet) nixos-test mixFodDeps;
+#   inherit (packageSet) attest mixFodDeps;
 {
   pkgs,
   beamPackages,
   elixir,
 }:
 let
-  pname = "nixos-test";
+  pname = "attest";
   version = "0.1.0";
   src = ./..;
 
@@ -36,7 +36,7 @@ let
   };
 
   # build the release
-  nixos-test = beamPackages.mixRelease {
+  attest = beamPackages.mixRelease {
     inherit
       pname
       version
@@ -52,29 +52,29 @@ let
 
     installPhase =
       let
-        wrapper = pkgs.writeShellScript "nixos-test" ''
-          exec ${erlang}/bin/escript @out@/libexec/nixos-test-escript "$@"
+        wrapper = pkgs.writeShellScript "attest" ''
+          exec ${erlang}/bin/escript @out@/libexec/attest-escript "$@"
         '';
       in
       ''
         runHook preInstall
         mkdir -p $out/bin $out/libexec
-        cp nixos_test $out/libexec/nixos-test-escript
+        cp attest $out/libexec/attest-escript
 
         # create wrapper script
-        substitute ${wrapper} $out/bin/nixos-test --subst-var out
-        chmod +x $out/bin/nixos-test
+        substitute ${wrapper} $out/bin/attest --subst-var out
+        chmod +x $out/bin/attest
         runHook postInstall
       '';
 
     meta = with pkgs.lib; {
       description = "NixOS test driver rewritten in Elixir";
-      homepage = "https://github.com/anomalyco/nixos-test-ng";
+      homepage = "https://github.com/anomalyco/attest";
       license = licenses.mit;
-      mainProgram = "nixos-test";
+      mainProgram = "attest";
     };
   };
 in
 {
-  inherit nixos-test mixFodDeps mixFodDepsAll;
+  inherit attest mixFodDeps mixFodDepsAll;
 }

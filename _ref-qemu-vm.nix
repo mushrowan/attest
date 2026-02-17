@@ -1,0 +1,1 @@
+/home/rowan/dev/nix/nixpkgs/nixos/modules/virtualisation/qemu-vm.nix

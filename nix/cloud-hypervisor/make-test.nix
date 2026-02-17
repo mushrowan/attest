@@ -6,7 +6,7 @@
 #
 # usage:
 #   test = import ./make-test.nix {
-#     inherit pkgs nixos-test-ng;
+#     inherit pkgs attest;
 #     name = "my-test";
 #     nodes = {
 #       server = { pkgs, ... }: {
@@ -15,12 +15,12 @@
 #     };
 #     testScript = ''
 #       start_all.()
-#       server |> NixosTest.wait_for_unit("nginx.service")
+#       server |> Attest.wait_for_unit("nginx.service")
 #     '';
 #   };
 {
   pkgs,
-  nixos-test-ng,
+  attest,
   # test name
   name,
   # attrset of node name -> NixOS module (or list of modules)
@@ -114,7 +114,7 @@ let
   driver = import ../driver.nix {
     inherit
       pkgs
-      nixos-test-ng
+      attest
       vlans
       globalTimeout
       extraDriverArgs

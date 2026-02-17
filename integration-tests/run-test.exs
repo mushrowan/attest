@@ -34,7 +34,7 @@ defmodule IntegrationTest do
     Logger.info("starting VM with command: #{start_command}")
 
     {:ok, machine} =
-      NixosTest.Machine.start_link(
+      Attest.Machine.start_link(
         name: "integration-test",
         start_command: start_command,
         qmp_socket_path: qmp_path,
@@ -44,12 +44,12 @@ defmodule IntegrationTest do
     try do
       # boot VM (5 min timeout handled by Machine.start)
       Logger.info("booting VM...")
-      :ok = NixosTest.Machine.start(machine)
+      :ok = Attest.Machine.start(machine)
       Logger.info("VM booted, shell connected")
 
       # test execute
       Logger.info("testing execute...")
-      {exit_code, output} = NixosTest.Machine.execute(machine, "echo hello-from-vm")
+      {exit_code, output} = Attest.Machine.execute(machine, "echo hello-from-vm")
       Logger.info("execute result: exit=#{exit_code}, output=#{inspect(output)}")
 
       if exit_code != 0 do
@@ -62,13 +62,13 @@ defmodule IntegrationTest do
 
       # test wait_for_unit
       Logger.info("waiting for multi-user.target...")
-      :ok = NixosTest.Machine.wait_for_unit(machine, "multi-user.target", 60_000)
+      :ok = Attest.Machine.wait_for_unit(machine, "multi-user.target", 60_000)
       Logger.info("multi-user.target is active")
 
       # test screenshot
       Logger.info("testing screenshot...")
       screenshot_path = Path.join(state_dir, "screenshot.ppm")
-      :ok = NixosTest.Machine.screenshot(machine, screenshot_path)
+      :ok = Attest.Machine.screenshot(machine, screenshot_path)
 
       if not File.exists?(screenshot_path) do
         raise "screenshot file not created: #{screenshot_path}"
@@ -84,7 +84,7 @@ defmodule IntegrationTest do
 
       # test graceful shutdown (poweroff via shell, wait for exit)
       Logger.info("graceful shutdown...")
-      :ok = NixosTest.Machine.shutdown(machine, 60_000)
+      :ok = Attest.Machine.shutdown(machine, 60_000)
       Logger.info("VM shutdown complete")
 
       Logger.info("=== ALL TESTS PASSED ===")
@@ -94,7 +94,7 @@ defmodule IntegrationTest do
         Logger.error("test failed: #{inspect(e)}")
         # try to halt machine on failure
         try do
-          NixosTest.Machine.halt(machine, 10_000)
+          Attest.Machine.halt(machine, 10_000)
         rescue
           _ -> :ok
         end

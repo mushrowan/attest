@@ -24,24 +24,24 @@ defmodule MultiVMTest do
 
     Logger.info("starting Driver with 2 machines...")
 
-    {:ok, driver} = NixosTest.Driver.start_link(machines: machines)
+    {:ok, driver} = Attest.Driver.start_link(machines: machines)
 
     try do
       # start machines sequentially to debug
       Logger.info("booting alice...")
-      {:ok, alice} = NixosTest.Driver.get_machine(driver, "alice")
-      :ok = NixosTest.Machine.start(alice)
+      {:ok, alice} = Attest.Driver.get_machine(driver, "alice")
+      :ok = Attest.Machine.start(alice)
       Logger.info("alice booted")
 
       Logger.info("booting bob...")
-      {:ok, bob} = NixosTest.Driver.get_machine(driver, "bob")
-      :ok = NixosTest.Machine.start(bob)
+      {:ok, bob} = Attest.Driver.get_machine(driver, "bob")
+      :ok = Attest.Machine.start(bob)
       Logger.info("bob booted")
       Logger.info("all VMs booted")
 
       # test execute on alice
       Logger.info("testing execute on alice...")
-      {exit_code, output} = NixosTest.Machine.execute(alice, "hostname")
+      {exit_code, output} = Attest.Machine.execute(alice, "hostname")
       Logger.info("alice hostname: #{String.trim(output)}")
 
       if exit_code != 0 do
@@ -50,7 +50,7 @@ defmodule MultiVMTest do
 
       # test execute on bob
       Logger.info("testing execute on bob...")
-      {exit_code, output} = NixosTest.Machine.execute(bob, "hostname")
+      {exit_code, output} = Attest.Machine.execute(bob, "hostname")
       Logger.info("bob hostname: #{String.trim(output)}")
 
       if exit_code != 0 do
@@ -62,13 +62,13 @@ defmodule MultiVMTest do
 
       task_alice =
         Task.async(fn ->
-          {code, out} = NixosTest.Machine.execute(alice, "echo alice-says-hi && sleep 0.5")
+          {code, out} = Attest.Machine.execute(alice, "echo alice-says-hi && sleep 0.5")
           {code, String.trim(out)}
         end)
 
       task_bob =
         Task.async(fn ->
-          {code, out} = NixosTest.Machine.execute(bob, "echo bob-says-hi && sleep 0.5")
+          {code, out} = Attest.Machine.execute(bob, "echo bob-says-hi && sleep 0.5")
           {code, String.trim(out)}
         end)
 
@@ -78,9 +78,9 @@ defmodule MultiVMTest do
 
       # shutdown both
       Logger.info("shutting down VMs...")
-      :ok = NixosTest.Machine.shutdown(alice, 60_000)
+      :ok = Attest.Machine.shutdown(alice, 60_000)
       Logger.info("alice shutdown complete")
-      :ok = NixosTest.Machine.shutdown(bob, 60_000)
+      :ok = Attest.Machine.shutdown(bob, 60_000)
       Logger.info("bob shutdown complete")
 
       Logger.info("=== MULTI-VM TEST PASSED ===")

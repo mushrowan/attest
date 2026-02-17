@@ -1,9 +1,9 @@
-defmodule NixosTest.MixProject do
+defmodule Attest.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :nixos_test,
+      app: :attest,
       version: "0.1.0",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
@@ -30,7 +30,7 @@ defmodule NixosTest.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {NixosTest.Application, []}
+      mod: {Attest.Application, []}
     ]
   end
 
@@ -47,12 +47,12 @@ defmodule NixosTest.MixProject do
   end
 
   defp escript do
-    [main_module: NixosTest.CLI]
+    [main_module: Attest.CLI]
   end
 
   defp releases do
     [
-      nixos_test: [
+      attest: [
         include_executables_for: [:unix],
         applications: [runtime_tools: :permanent]
       ]

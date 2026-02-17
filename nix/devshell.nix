@@ -1,4 +1,4 @@
-# development shell for nixos-test
+# development shell for attest
 #
 # usage:
 #   devShells.default = import ./nix/devshell.nix { inherit pkgs elixir beamPackages checks; };
@@ -84,7 +84,7 @@ pkgs.mkShell {
       mix local.hex --force --if-missing
     fi
 
-    echo "nixos-test-ng dev shell"
+    echo "attest dev shell"
     echo ""
     echo "commands:"
     echo "  mix test         - run tests"

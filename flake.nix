@@ -1,5 +1,5 @@
 {
-  description = "nixos test driver rewritten in elixir";
+  description = "attest — NixOS test driver in elixir";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -44,11 +44,11 @@
           packageSet = import ./nix/package.nix {
             inherit pkgs beamPackages elixir;
           };
-          inherit (packageSet) nixos-test mixFodDeps mixFodDepsAll;
+          inherit (packageSet) attest mixFodDeps mixFodDepsAll;
         in
         {
           checks = {
-            inherit nixos-test;
+            inherit attest;
 
             # mix format check
             format =
@@ -67,7 +67,7 @@
 
             # mix test - use all deps (including test deps)
             test = beamPackages.mixRelease {
-              pname = "nixos-test-tests";
+              pname = "attest-tests";
               version = "0.1.0";
               src = ./.;
               inherit elixir;
@@ -99,7 +99,7 @@
             let
               integrationTests = import ./integration-tests {
                 inherit pkgs;
-                nixos-test-ng = nixos-test;
+                attest = attest;
               };
             in
             {
@@ -110,15 +110,15 @@
               # make-test smoke test (nix wrapper end-to-end)
               make-test-smoke = import ./nix/make-test.nix {
                 inherit pkgs;
-                nixos-test-ng = nixos-test;
+                attest = attest;
                 name = "smoke";
                 nodes = {
                   machine = { };
                 };
                 testScript = ''
                   start_all.()
-                  NixosTest.wait_for_unit(machine, "multi-user.target")
-                  output = NixosTest.succeed(machine, "echo hello-from-make-test")
+                  Attest.wait_for_unit(machine, "multi-user.target")
+                  output = Attest.succeed(machine, "echo hello-from-make-test")
 
                   unless String.contains?(output, "hello-from-make-test") do
                     raise "unexpected output: #{inspect(output)}"
@@ -128,7 +128,7 @@
               # multi-node make-test (two VMs, validates multi-node pipeline)
               make-test-multi = import ./nix/make-test.nix {
                 inherit pkgs;
-                nixos-test-ng = nixos-test;
+                attest = attest;
                 name = "multi";
                 nodes = {
                   server = { };
@@ -136,11 +136,11 @@
                 };
                 testScript = ''
                   start_all.()
-                  NixosTest.wait_for_unit(server, "multi-user.target")
-                  NixosTest.wait_for_unit(client, "multi-user.target")
+                  Attest.wait_for_unit(server, "multi-user.target")
+                  Attest.wait_for_unit(client, "multi-user.target")
 
-                  server_out = NixosTest.succeed(server, "hostname")
-                  client_out = NixosTest.succeed(client, "hostname")
+                  server_out = Attest.succeed(server, "hostname")
+                  client_out = Attest.succeed(client, "hostname")
 
                   unless String.contains?(server_out, "server") do
                     raise "server hostname mismatch: #{inspect(server_out)}"
@@ -154,15 +154,15 @@
               # firecracker make-test smoke test (ext4 rootfs, vmlinux, vsock backdoor)
               firecracker-smoke = import ./nix/firecracker/make-test.nix {
                 inherit pkgs;
-                nixos-test-ng = nixos-test;
+                attest = attest;
                 name = "fc-smoke";
                 nodes = {
                   machine = { };
                 };
                 testScript = ''
                   start_all.()
-                  NixosTest.wait_for_unit(machine, "multi-user.target")
-                  output = NixosTest.succeed(machine, "echo hello-from-firecracker")
+                  Attest.wait_for_unit(machine, "multi-user.target")
+                  output = Attest.succeed(machine, "echo hello-from-firecracker")
 
                   unless String.contains?(output, "hello-from-firecracker") do
                     raise "unexpected output: #{inspect(output)}"
@@ -172,15 +172,15 @@
               # cloud-hypervisor make-test smoke test (ext4 rootfs, vmlinux, vsock)
               cloud-hypervisor-smoke = import ./nix/cloud-hypervisor/make-test.nix {
                 inherit pkgs;
-                nixos-test-ng = nixos-test;
+                attest = attest;
                 name = "ch-smoke";
                 nodes = {
                   machine = { };
                 };
                 testScript = ''
                   start_all.()
-                  NixosTest.wait_for_unit(machine, "multi-user.target")
-                  output = NixosTest.succeed(machine, "echo hello-from-cloud-hypervisor")
+                  Attest.wait_for_unit(machine, "multi-user.target")
+                  output = Attest.succeed(machine, "echo hello-from-cloud-hypervisor")
 
                   unless String.contains?(output, "hello-from-cloud-hypervisor") do
                     raise "unexpected output: #{inspect(output)}"
@@ -191,8 +191,8 @@
           );
 
           packages = {
-            default = nixos-test;
-            inherit nixos-test;
+            default = attest;
+            inherit attest;
           };
 
           devShells.default = import ./nix/devshell.nix {
