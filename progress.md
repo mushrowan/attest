@@ -2,7 +2,7 @@
 
 ## status
 
-183 tests, `nix flake check` green
+194 tests, `nix flake check` green
 
 ### what's built
 - Machine GenServer with Backend behaviour (14 callbacks)
@@ -19,11 +19,10 @@
 - firecracker nix integration: make-rootfs.nix, test-instrumentation.nix, make-test.nix
 - firecracker smoke test passing in `nix flake check` (boot, execute, shutdown)
 - vsock transport retry on closed/econnrefused during guest boot
+- OCR module: tesseract + imagemagick preprocessing, 3 parallel variants
+- Machine: get_screen_text, get_screen_text_variants, wait_for_text
 
 ## next
-
-### missing machine methods
-- OCR / screenshot text extraction
 
 ### Backend.CloudHypervisor
 - REST API client (similar to firecracker)
