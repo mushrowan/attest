@@ -27,7 +27,7 @@
 - API.put_no_body/2 for bodyless PUT endpoints (cloud-hypervisor rejects empty {})
 
 ## next
-- rename project to **attest**
+- ~~rename project to **attest**~~ done
 - test DSL as alternative to raw elixir scripts
 - in-guest screenshots via xvfb + imagemagick (non-QEMU backends)
 - `Network` behaviour — TAP + bridge networking abstraction
