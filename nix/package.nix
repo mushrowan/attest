@@ -24,7 +24,7 @@ let
       src
       elixir
       ;
-    hash = "sha256-T1uL3xXXmCkobJJhS3p6xMrJUyiim3AMwaG87/Ix7A8=";
+    hash = "sha256-5Tt5zxz9VwjLgEIDqbHzcU4D8GkuBESf6lUcMt81GaM=";
   };
 
   # all deps including dev/test (for running tests)
