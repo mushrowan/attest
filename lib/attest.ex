@@ -45,6 +45,24 @@ defmodule Attest do
   end
 
   @doc """
+  Run a function on each item concurrently, waiting for all to complete.
+
+  Useful for parallel readiness checks across multiple machines:
+
+      wait_all.([server, client], fn m ->
+        Attest.wait_for_unit(m, "multi-user.target")
+      end)
+  """
+  @spec wait_all(Enumerable.t(), (any() -> any())) :: :ok
+  def wait_all(items, fun) do
+    items
+    |> Enum.map(&Task.async(fn -> fun.(&1) end))
+    |> Task.await_many(:infinity)
+
+    :ok
+  end
+
+  @doc """
   Wait for a systemd unit to become active.
   """
   @spec wait_for_unit(GenServer.server(), String.t(), keyword()) :: GenServer.server()
