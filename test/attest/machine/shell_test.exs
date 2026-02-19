@@ -3,11 +3,18 @@ defmodule Attest.Machine.ShellTest do
 
   alias Attest.Machine.Shell
 
-  # helper to simulate QEMU connecting to shell socket
+  defp wait_for_socket(path, retries \\ 50) do
+    if File.exists?(path),
+      do: :ok,
+      else:
+        (
+          Process.sleep(50)
+          wait_for_socket(path, retries - 1)
+        )
+  end
+
   defp with_mock_guest(socket_path, fun) do
-    # connect as if we're the guest
-    # small delay to let server start listening
-    Process.sleep(50)
+    wait_for_socket(socket_path)
 
     {:ok, socket} =
       :gen_tcp.connect({:local, socket_path}, 0, [:binary, {:packet, :line}, {:active, false}])
@@ -114,7 +121,7 @@ defmodule Attest.Machine.ShellTest do
         end)
       end)
 
-      :ok = Shell.wait_for_connection(shell, 5000)
+      :ok = Shell.wait_for_connection(shell, 15_000)
 
       assert {:ok, "command not found\n", 127} = Shell.execute(shell, "nonexistent")
 
