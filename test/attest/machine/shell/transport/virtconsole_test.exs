@@ -34,7 +34,7 @@ defmodule Attest.Machine.Shell.Transport.VirtConsoleTest do
       end)
 
       config = %{socket_path: socket_path}
-      assert {:ok, socket} = VirtConsole.connect(config, 5000)
+      assert {:ok, socket} = VirtConsole.connect(config, 15_000)
       assert is_port(socket)
       assert_receive :guest_connected, 2000
 

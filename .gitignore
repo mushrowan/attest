@@ -1,0 +1,43 @@
+# nix
+/result
+/result-*
+.direnv/
+
+# elixir
+/_build/
+/cover/
+/deps/
+/doc/
+/.fetch
+*.ez
+*.beam
+/config/*.secret.exs
+.elixir_ls/
+
+# mix local directories
+.nix-mix/
+.nix-hex/
+
+# dialyzer
+/priv/plts/
+
+# test coverage
+/cover/
+
+# editor
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# os
+.DS_Store
+Thumbs.db
+
+# escript output
+/attest
+
+# misc
+erl_crash.dump
+*.qcow2
