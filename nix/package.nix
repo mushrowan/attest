@@ -1,80 +1,44 @@
-# attest package build using mixRelease
+# attest package build
 #
-# usage:
-#   packageSet = import ./package.nix { inherit pkgs beamPackages elixir; };
-#   inherit (packageSet) attest mixFodDeps;
+# uses mixRelease with escriptBinName, matching nixpkgs conventions
+# (see ex_doc, protoc-gen-elixir for reference)
 {
-  pkgs,
   beamPackages,
-  elixir,
+  fetchMixDeps ? beamPackages.fetchMixDeps,
+  mixRelease ? beamPackages.mixRelease,
+  lib,
 }:
 let
   pname = "attest";
   version = "0.1.0";
   src = ./..;
+in
+{
+  attest = mixRelease {
+    inherit pname version src;
 
-  erlang = beamPackages.erlang;
+    escriptBinName = "attest";
 
-  # fetch mix dependencies as FOD (fixed-output derivation)
-  # prod deps only (for release build)
-  mixFodDeps = beamPackages.fetchMixDeps {
-    inherit
-      pname
-      version
-      src
-      elixir
-      ;
-    hash = "sha256-5Tt5zxz9VwjLgEIDqbHzcU4D8GkuBESf6lUcMt81GaM=";
-  };
+    mixFodDeps = fetchMixDeps {
+      inherit src version;
+      pname = "attest-deps";
+      hash = "sha256-T1uL3xXXmCkobJJhS3p6xMrJUyiim3AMwaG87/Ix7A8=";
+    };
 
-  # all deps including dev/test (for running tests)
-  mixFodDepsAll = beamPackages.fetchMixDeps {
-    pname = "${pname}-all-deps";
-    inherit version src elixir;
-    mixEnv = ""; # empty = all deps
-    hash = "sha256-DfZ0GtQInaK04JxgjarPtLsS1JHC288PNc9Idum3rW4=";
-  };
+    # all deps including dev/test (for running tests in nix)
+    passthru.mixFodDepsAll = fetchMixDeps {
+      inherit src version;
+      pname = "attest-all-deps";
+      mixEnv = "";
+      hash = "sha256-DfZ0GtQInaK04JxgjarPtLsS1JHC288PNc9Idum3rW4=";
+    };
 
-  # build the release
-  attest = beamPackages.mixRelease {
-    inherit
-      pname
-      version
-      src
-      elixir
-      mixFodDeps
-      ;
+    stripDebug = true;
 
-    # build as escript for CLI usage
-    postBuild = ''
-      mix escript.build
-    '';
-
-    installPhase =
-      let
-        wrapper = pkgs.writeShellScript "attest" ''
-          exec ${erlang}/bin/escript @out@/libexec/attest-escript "$@"
-        '';
-      in
-      ''
-        runHook preInstall
-        mkdir -p $out/bin $out/libexec
-        cp attest $out/libexec/attest-escript
-
-        # create wrapper script
-        substitute ${wrapper} $out/bin/attest --subst-var out
-        chmod +x $out/bin/attest
-        runHook postInstall
-      '';
-
-    meta = with pkgs.lib; {
-      description = "NixOS test driver rewritten in Elixir";
-      homepage = "https://github.com/anomalyco/attest";
-      license = licenses.mit;
+    meta = {
+      description = "NixOS test driver in elixir";
+      license = lib.licenses.mit;
       mainProgram = "attest";
     };
   };
-in
-{
-  inherit attest mixFodDeps mixFodDepsAll;
 }
