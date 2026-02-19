@@ -85,8 +85,8 @@ defmodule Attest.Machine.ShellTest do
         end)
       end)
 
-      # wait for connection
-      :ok = Shell.wait_for_connection(shell, 5000)
+      # wait for connection (generous timeout for nix sandbox)
+      :ok = Shell.wait_for_connection(shell, 15_000)
 
       # execute command
       assert {:ok, "hello world\n", 0} = Shell.execute(shell, "echo hello world")

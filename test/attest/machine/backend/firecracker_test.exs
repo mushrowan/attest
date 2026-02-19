@@ -161,24 +161,15 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
 
       test_pid = self()
 
-      # mock server: PUT /snapshot/load then PATCH /vm to resume
+      # mock server: PUT /snapshot/load with resume_vm=true
       server =
         spawn_link(fn ->
-          # first request: PUT /snapshot/load
           {:ok, conn} = :gen_tcp.accept(listen, 5000)
           {:ok, data} = recv_all(conn)
           send(test_pid, {:api_call, :snapshot_load, data})
           response = "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"
           :gen_tcp.send(conn, response)
           :gen_tcp.close(conn)
-
-          # second request: PATCH /vm to resume
-          {:ok, conn2} = :gen_tcp.accept(listen, 5000)
-          {:ok, data2} = recv_all(conn2)
-          send(test_pid, {:api_call, :resume, data2})
-          response2 = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
-          :gen_tcp.send(conn2, response2)
-          :gen_tcp.close(conn2)
         end)
 
       config = %{name: "snap-load", state_dir: state_dir}
@@ -186,16 +177,12 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
 
       assert :ok = Firecracker.snapshot_load(state, snap_dir)
 
-      # verify snapshot load request
+      # verify snapshot load request includes resume_vm
       assert_receive {:api_call, :snapshot_load, load_data}
       assert load_data =~ "PUT /snapshot/load"
       assert load_data =~ "snapshot_file"
       assert load_data =~ "mem_file"
-
-      # verify resume request
-      assert_receive {:api_call, :resume, resume_data}
-      assert resume_data =~ "PATCH /vm"
-      assert resume_data =~ "Resumed"
+      assert load_data =~ "resume_vm"
 
       Process.exit(server, :normal)
       :gen_tcp.close(listen)
@@ -253,19 +240,12 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
           {:ok, api_listen} =
             :gen_tcp.listen(0, [:binary, {:active, false}, {:ip, {:local, api_socket}}])
 
-          # handle PUT /snapshot/load
+          # handle PUT /snapshot/load (with resume_vm=true)
           {:ok, conn1} = :gen_tcp.accept(api_listen, 10_000)
           {:ok, data1} = recv_all(conn1)
           send(test_pid, {:restore_api, :load, data1})
           :gen_tcp.send(conn1, "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
           :gen_tcp.close(conn1)
-
-          # handle PATCH /vm resume
-          {:ok, conn2} = :gen_tcp.accept(api_listen, 10_000)
-          {:ok, data2} = recv_all(conn2)
-          send(test_pid, {:restore_api, :resume, data2})
-          :gen_tcp.send(conn2, "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
-          :gen_tcp.close(conn2)
 
           # create vsock UDS and handle shell CONNECT protocol
           {:ok, vsock_listen} =
@@ -296,13 +276,10 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
       assert new_state.shell == shell_pid
       assert new_state.fc_port != old_port
 
-      # verify the API calls were made
+      # verify the API calls were made (resume_vm=true, single call)
       assert_receive {:restore_api, :load, load_data}, 5000
       assert load_data =~ "PUT /snapshot/load"
-
-      assert_receive {:restore_api, :resume, resume_data}, 5000
-      assert resume_data =~ "PATCH /vm"
-      assert resume_data =~ "Resumed"
+      assert load_data =~ "resume_vm"
 
       # verify shell works after restore
       assert {:ok, "restored-ok", 0} =

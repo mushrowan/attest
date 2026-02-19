@@ -129,7 +129,11 @@ let
       };
 
       toplevel = nixos.config.system.build.toplevel;
-      vmlinux = "${nixos.config.boot.kernelPackages.kernel.dev}/vmlinux";
+      # copy vmlinux out of kernel.dev to avoid dragging in the entire
+      # dev output (580MB) + rustc (995MB) + llvm (541MB) into the closure
+      vmlinux = pkgs.runCommand "vmlinux" { } ''
+        cp ${nixos.config.boot.kernelPackages.kernel.dev}/vmlinux $out
+      '';
       initrd = "${nixos.config.system.build.initialRamdisk}/${nixos.config.system.boot.loader.initrdFile}";
 
       bootArgs = builtins.concatStringsSep " " (

@@ -122,7 +122,10 @@ let
       };
 
       toplevel = nixos.config.system.build.toplevel;
-      vmlinux = "${nixos.config.boot.kernelPackages.kernel.dev}/vmlinux";
+      # copy vmlinux out of kernel.dev to avoid the entire dev closure
+      vmlinux = pkgs.runCommand "vmlinux" { } ''
+        cp ${nixos.config.boot.kernelPackages.kernel.dev}/vmlinux $out
+      '';
       initrd = "${nixos.config.system.build.initialRamdisk}/${nixos.config.system.boot.loader.initrdFile}";
       bootArgs = builtins.concatStringsSep " " (
         nixos.config.boot.kernelParams ++ [ "init=${toplevel}/init" ]

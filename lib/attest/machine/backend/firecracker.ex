@@ -253,13 +253,27 @@ defmodule Attest.Machine.Backend.Firecracker do
     snapshot_path = Path.join(snapshot_dir, "snapshot_file")
     mem_path = Path.join(snapshot_dir, "mem_file")
 
-    with :ok <-
-           API.put(api, "/snapshot/load", %{
-             "snapshot_path" => snapshot_path,
-             "mem_file_path" => mem_path
-           }),
-         :ok <- API.patch(api, "/vm", %{"state" => "Resumed"}) do
-      :ok
+    # retry snapshot load — the API socket file may appear before FC is listening
+    retry_api(fn ->
+      API.put(api, "/snapshot/load", %{
+        "snapshot_path" => snapshot_path,
+        "mem_file_path" => mem_path,
+        "resume_vm" => true
+      })
+    end)
+  end
+
+  defp retry_api(fun, attempts \\ 20) do
+    case fun.() do
+      :ok ->
+        :ok
+
+      {:error, reason} when reason in [:econnrefused, :closed] and attempts > 0 ->
+        Process.sleep(100)
+        retry_api(fun, attempts - 1)
+
+      other ->
+        other
     end
   end
 
@@ -281,9 +295,9 @@ defmodule Attest.Machine.Backend.Firecracker do
       end
     end
 
-    # clean up old sockets
+    # clean up old sockets and wait until gone (old FC may linger)
     File.rm(state.api_socket_path)
-    File.rm(state.vsock_uds_path)
+    wait_for_file_gone(state.vsock_uds_path, 5_000)
 
     # spawn fresh firecracker process
     cmd = "#{state.firecracker_bin} --api-sock #{state.api_socket_path}"
@@ -296,10 +310,9 @@ defmodule Attest.Machine.Backend.Firecracker do
     # wait for API socket
     :ok = wait_for_file(state.api_socket_path, 10_000)
 
-    # load snapshot and resume
+    # load snapshot and resume in one call
     :ok = snapshot_load(state, snapshot_dir)
 
-    # wait for vsock UDS (restored VM recreates it)
     :ok = wait_for_file(state.vsock_uds_path, 30_000)
 
     # reconnect shell via vsock
@@ -355,14 +368,16 @@ defmodule Attest.Machine.Backend.Firecracker do
   defp configure_vm(state) do
     api = state.api_socket_path
 
-    # logger
+    # logger (retry — socket file may appear before FC is listening)
     :ok =
-      API.put(api, "/logger", %{
-        "log_path" => state.log_path,
-        "level" => state.log_level,
-        "show_level" => true,
-        "show_log_origin" => true
-      })
+      retry_api(fn ->
+        API.put(api, "/logger", %{
+          "log_path" => state.log_path,
+          "level" => state.log_level,
+          "show_level" => true,
+          "show_log_origin" => true
+        })
+      end)
 
     # machine config
     :ok =
@@ -422,6 +437,26 @@ defmodule Attest.Machine.Backend.Firecracker do
     end)
 
     :ok
+  end
+
+  defp wait_for_file_gone(path, timeout) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    do_wait_for_file_gone(path, deadline)
+  end
+
+  defp do_wait_for_file_gone(path, deadline) do
+    if File.exists?(path) do
+      File.rm(path)
+
+      if System.monotonic_time(:millisecond) >= deadline do
+        :ok
+      else
+        Process.sleep(50)
+        do_wait_for_file_gone(path, deadline)
+      end
+    else
+      :ok
+    end
   end
 
   defp wait_for_file(path, timeout) do
