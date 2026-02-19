@@ -141,11 +141,6 @@ let
             inherit pkgs toplevel name;
           };
 
-      storeImage = lib.optionalAttrs splitStore {
-        store = import ../firecracker/make-store-image.nix {
-          inherit pkgs toplevel;
-        };
-      };
     in
     {
       config = nixos.config;
@@ -156,10 +151,16 @@ let
         bootArgs
         rootfs
         ;
-    }
-    // storeImage;
+    };
 
   evaluatedNodes = lib.mapAttrs evalNode nodes;
+
+  sharedStoreImage = lib.optionalAttrs splitStore (
+    import ../firecracker/make-shared-store-image.nix {
+      inherit pkgs;
+      toplevels = lib.mapAttrsToList (_: node: node.toplevel) evaluatedNodes;
+    }
+  );
 
   machines = lib.mapAttrsToList (
     nodeName: node:
@@ -175,7 +176,7 @@ let
       vcpu_count = vcpuCount;
     }
     // lib.optionalAttrs splitStore {
-      store_image_path = "${node.store}";
+      store_image_path = "${sharedStoreImage}";
     }
     // lib.optionalAttrs hasNetwork {
       tap_interfaces = map (t: [
