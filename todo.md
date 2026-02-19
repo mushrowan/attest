@@ -1,6 +1,6 @@
 # performance todo
 
-## benchmark results (railscale tests, `nix build --rebuild`)
+## current benchmark (railscale, `nix build --rebuild`)
 
 ```
 test                       python/QEMU  attest/FC  speedup
@@ -10,36 +10,80 @@ cli-integration (3 VMs)        383s       261s      1.4x
 TOTAL                          448s       318s      1.4x
 ```
 
-## done
+## time breakdown (module-smoke, 4 VMs)
 
-- [x] **extract vmlinux** — `runCommand` copies vmlinux out of kernel.dev.
-  saved ~2.4GB (linux-dev + rustc + llvm + gcc)
-- [x] **headless erlang** — `beam.override { wxSupport = false; }`.
-  saved ~200MB (wx + gtk + webkitgtk)
-- [x] **shared store image** — one erofs for all nodes in a test.
-  module-smoke: 4 × 1.8GB → 1 × 891MB
-- [x] **idiomatic package.nix** — escriptBinName, passthru.mixFodDepsAll
+```
+escript startup + driver init     0.3s
+FC API config (4 VMs parallel)    0.4s
+VM boot → vsock ready             6.4s
+wait_for_unit (already up)        0.1s
+4 × Process.sleep(3000) SEQ      12.0s   ← test script, can't change
+shutdown                           1.0s
+                          TOTAL  ~20s
+```
 
-## remaining
+## firecracker-specific optimisations
 
-### P1: escript startup (~0.8s per run)
+### 1. huge pages (`huge_pages: "2M"`)
+- [ ] add `huge_pages` field to machine-config API call
+- [ ] add `huge_pages` option to make-test.nix
+- [ ] document host requirement: pre-allocated hugetlbfs pool
+- FC docs claim **up to 50% faster boot** and faster snapshot restore
+- requires `nix.settings.extra-sandbox-paths = ["/dev/hugepages"]` or similar
+- simple: one field in `/machine-config` PUT
 
-- [ ] **build as mix release** — escripts decompress beam files on every
-  invocation. a release has pre-extracted beams. ~800ms → ~200ms
+### 2. entropy device (`/entropy`)
+- [ ] configure `/entropy` endpoint during VM setup
+- [ ] add `CONFIG_HW_RANDOM_VIRTIO` to test-instrumentation kernel modules
+- virtio-rng gives guest immediate high-quality randomness
+- avoids any entropy starvation stalls during boot
+- cheap to add, might save a few hundred ms
 
-### P2: rootfs handling
+### 3. snapshot/restore for fast VM cloning
+- [ ] solve vsock reconnect after restore
+- [ ] implement "boot once, snapshot, restore N" pattern
+- cold boot: ~6.4s → snapshot restore: ~85ms (75x faster)
+- memory is MAP_PRIVATE (CoW), so N restores share base pages
+- **blocker**: FC only accepts one vsock UDS connection. if first
+  CONNECT arrives before guest driver resets, FC stops listening
+  permanently. known issue [#1253]
+- possible workarounds:
+  - (a) delay CONNECT until guest signals readiness via MMDS
+  - (b) use serial console transport after restore instead of vsock
+  - (c) patch guest init to re-bind vsock listener after transport reset
+  - (d) use diff snapshots + fresh FC process per restore (current approach,
+        but vsock UDS still has the race)
 
-- [ ] **CoW overlay instead of copying rootfs** — use device-mapper snapshot
-  or loopback + overlay so the nix store original stays read-only
+### 4. diff snapshots for test isolation
+- [ ] depends on snapshot/restore working (#3)
+- [ ] boot base VM, snapshot after systemd ready
+- [ ] per test case: restore from base, run test, discard
+- only dirty pages saved per snapshot (sparse files)
+- enables parallel test execution from same base state
+- needs `track_dirty_pages: true` in machine-config
 
-### P3: VM lifecycle
+### 5. MMDS for host→guest config
+- [ ] configure MMDS on network interface
+- [ ] use MMDS to pass test parameters instead of shell commands
+- not a speed win per se, but enables snapshot/restore signal flow
+- guest can poll MMDS to detect restore and signal readiness
+- data store is NOT persisted across snapshots (by design)
 
-- [ ] **`wait_all` helper** — `start_all` boots VMs in parallel but test
-  scripts then do sequential `wait_for_unit` per VM. concurrent waiting
-  would help multi-VM tests
+## non-FC optimisations
 
-### P4: nix eval overhead
+### 6. `wait_all` helper
+- [ ] add `Attest.wait_all/2` that waits on multiple machines concurrently
+- module-smoke does 4 sequential wait_for_unit + 3s sleep = 12s wasted
+- concurrent waiting would save ~9s on module-smoke
 
-- [ ] **module-smoke nix eval** — 47s vs python's 41s. the attest nix
-  expressions evaluate slower (more complex make-test.nix). profiling
-  needed to find what's slow
+### 7. mix release instead of escript
+- [ ] switch from escript to mix release in package.nix
+- escripts decompress BEAM files on every invocation (~800ms)
+- releases have pre-extracted BEAMs (~200ms startup)
+- saves ~600ms per test run
+
+### 8. nix eval overhead
+- [ ] profile make-test.nix evaluation time
+- module-smoke: 47s total but only ~20s is VM execution
+- remaining ~27s is nix evaluation + sandbox setup
+- python's simpler nix expressions eval faster
