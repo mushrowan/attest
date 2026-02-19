@@ -87,6 +87,9 @@
     ]
     ++ lib.optionals (config.testing.vlans != [ ]) [
       "virtio_net"
+    ]
+    ++ [
+      "virtio_rng"
     ];
 
     # kernel params for serial console and crash behaviour

@@ -93,7 +93,7 @@ defmodule Attest.MachineConfig do
     }
 
     optional_fields =
-      [:initrd_path, :kernel_boot_args, :mem_size_mib, :vcpu_count]
+      [:initrd_path, :kernel_boot_args, :mem_size_mib, :vcpu_count, :huge_pages, :entropy]
       |> Enum.reduce(%{}, fn field, acc ->
         key = Atom.to_string(field)
 

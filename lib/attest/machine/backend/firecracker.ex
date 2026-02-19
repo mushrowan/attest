@@ -31,6 +31,8 @@ defmodule Attest.Machine.Backend.Firecracker do
   - `:tap_interfaces` — list of {iface_id, host_dev_name, guest_mac} (default: [])
   - `:extra_drives` — list of {drive_id, path, is_read_only} (default: [])
   - `:log_level` — firecracker log level (default: "Warning")
+  - `:huge_pages` — huge page size, "2M" or nil (default: nil)
+  - `:entropy` — enable virtio-rng entropy device (default: false)
   """
 
   @behaviour Attest.Machine.Backend
@@ -56,6 +58,8 @@ defmodule Attest.Machine.Backend.Firecracker do
     :tap_interfaces,
     :extra_drives,
     :log_level,
+    :huge_pages,
+    :entropy,
     :api_socket_path,
     :vsock_uds_path,
     :log_path,
@@ -88,6 +92,8 @@ defmodule Attest.Machine.Backend.Firecracker do
        tap_interfaces: Map.get(config, :tap_interfaces, []),
        extra_drives: Map.get(config, :extra_drives, []),
        log_level: Map.get(config, :log_level, "Warning"),
+       huge_pages: Map.get(config, :huge_pages),
+       entropy: Map.get(config, :entropy, false),
        api_socket_path: Path.join(state_dir, "firecracker.sock"),
        vsock_uds_path: Path.join(state_dir, "v.sock"),
        log_path: Path.join(state_dir, "firecracker.log")
@@ -380,11 +386,16 @@ defmodule Attest.Machine.Backend.Firecracker do
       end)
 
     # machine config
-    :ok =
-      API.put(api, "/machine-config", %{
+    machine_config =
+      %{
         "vcpu_count" => state.vcpu_count,
         "mem_size_mib" => state.mem_size_mib
-      })
+      }
+      |> then(fn cfg ->
+        if state.huge_pages, do: Map.put(cfg, "huge_pages", state.huge_pages), else: cfg
+      end)
+
+    :ok = API.put(api, "/machine-config", machine_config)
 
     # boot source
     boot_source = %{
@@ -435,6 +446,11 @@ defmodule Attest.Machine.Backend.Firecracker do
           "guest_mac" => guest_mac
         })
     end)
+
+    # entropy device (virtio-rng)
+    if state.entropy do
+      :ok = API.put(api, "/entropy", %{})
+    end
 
     :ok
   end

@@ -51,6 +51,10 @@
   vcpuCount ? 1,
   # use split store (erofs nix store on second drive)
   splitStore ? false,
+  # use 2MB huge pages for guest memory (requires hugetlbfs on host)
+  hugePages ? false,
+  # enable virtio-rng entropy device
+  entropy ? true,
 }:
 let
   inherit (pkgs) lib;
@@ -187,6 +191,10 @@ let
       kernel_boot_args = node.bootArgs;
       mem_size_mib = memSize;
       vcpu_count = vcpuCount;
+      entropy = entropy;
+    }
+    // lib.optionalAttrs hugePages {
+      huge_pages = "2M";
     }
     // lib.optionalAttrs splitStore {
       store_image_path = "${sharedStoreImage}";

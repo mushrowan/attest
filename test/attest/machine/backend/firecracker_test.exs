@@ -22,6 +22,44 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
       assert state.api_socket_path == "#{config.state_dir}/firecracker.sock"
       assert state.vsock_uds_path == "#{config.state_dir}/v.sock"
     end
+
+    test "defaults huge_pages to nil" do
+      config = %{
+        name: "hp-default",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4"
+      }
+
+      assert {:ok, state} = Firecracker.init(config)
+      assert state.huge_pages == nil
+    end
+
+    test "stores huge_pages when set" do
+      config = %{
+        name: "hp-enabled",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4",
+        huge_pages: "2M"
+      }
+
+      assert {:ok, state} = Firecracker.init(config)
+      assert state.huge_pages == "2M"
+    end
+
+    test "stores entropy when set" do
+      config = %{
+        name: "ent-enabled",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4",
+        entropy: true
+      }
+
+      assert {:ok, state} = Firecracker.init(config)
+      assert state.entropy == true
+    end
   end
 
   describe "capabilities/1" do
