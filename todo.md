@@ -10,8 +10,6 @@ cli-integration (3 VMs)        383s       261s      1.4x
 TOTAL                          448s       318s      1.4x
 ```
 
-needs re-running after entropy + shared store changes
-
 ## done
 
 - [x] extract vmlinux to own derivation (-2.4GB closure)
@@ -21,44 +19,33 @@ needs re-running after entropy + shared store changes
 - [x] entropy device (virtio-rng) — enabled by default
 - [x] huge pages support — wired through but off by default (needs host hugetlbfs)
 - [x] `Attest.wait_all/2` — concurrent multi-machine operations
+- [x] firecracker fork infrastructure (`mushrowan/firecracker`, flake input, update script)
+- [x] diagnostic logging for vsock transport (connect attempt reasons, FC liveness check)
+- [x] `firecrackerPackage` parameter in make-test.nix
 
-## remaining firecracker-specific
+## in progress
 
 ### 3. snapshot/restore for fast VM cloning
-- [ ] solve vsock reconnect after restore
-- [ ] implement "boot once, snapshot, restore N" pattern
-- cold boot: ~6.4s → snapshot restore: ~85ms (75x faster)
-- memory is MAP_PRIVATE (CoW), so N restores share base pages
-- **blocker**: FC only accepts one vsock UDS connection. if first
-  CONNECT arrives before guest driver resets, FC stops listening
-  permanently. known issue [#1253]
-- possible workarounds:
-  - (a) delay CONNECT until guest signals readiness via MMDS
-  - (b) use serial console transport after restore instead of vsock
-  - (c) patch guest init to re-bind vsock listener after transport reset
-  - (d) use diff snapshots + fresh FC process per restore (current approach,
-        but vsock UDS still has the race)
+- [x] forked FC, patched unwrap() panics in vsock event handler
+- [x] built patched FC 1.16.0-dev via flake input
+- [x] confirmed: **NOT caused by unwrap() panics** (same behaviour with patch)
+- [ ] root cause still unknown — vsock UDS listener dies after first connect post-restore
+- symptoms:
+  - first connect: `:closed` (kernel accepts, muxer closes stream)
+  - all subsequent: `:econnrefused` (listener socket gone)
+  - FC API thread stays alive (responds to HTTP)
+  - permanent — 120s of retries all fail
+- next steps to try:
+  - add println! instrumentation to FC muxer to trace what happens on first connect
+  - check if FC main thread panics/exits (port exit messages)
+  - check FC's own log file for errors post-restore
+  - try using `--log-path` on the new FC process to capture restore logs
 
-### 4. diff snapshots for test isolation
-- [ ] depends on snapshot/restore working (#3)
-- [ ] boot base VM, snapshot after systemd ready
-- [ ] per test case: restore from base, run test, discard
-- only dirty pages saved per snapshot (sparse files)
-- enables parallel test execution from same base state
+### 9. use wait_all in railscale test scripts
+- [x] `Attest.wait_all/2` implemented and tested
+- [ ] update module-smoke-attest.nix in railscale to use it
 
-### 5. MMDS for host→guest config
-- [ ] configure MMDS on network interface
-- [ ] use to signal restore readiness (unblocks #3)
-- data store NOT persisted across snapshots (by design)
-
-### huge pages (ready but not enabled)
-- wired through make-test.nix as `hugePages = true`
-- FC docs claim up to 50% faster boot
-- requires host: `nix.settings.extra-sandbox-paths = ["/dev/hugepages"]`
-  and pre-allocated hugetlbfs pool
-- also faster snapshot restore (fewer page table entries)
-
-## remaining non-FC
+## remaining
 
 ### 7. mix release instead of escript
 - [ ] switch from escript to mix release in package.nix
@@ -69,7 +56,8 @@ needs re-running after entropy + shared store changes
 - module-smoke: ~27s nix eval + sandbox vs ~20s VM execution
 - python's simpler nix expressions eval faster
 
-### 9. use wait_all in railscale test scripts
-- [ ] update module-smoke-attest.nix to use `Attest.wait_all/2`
-- currently 4 sequential wait_for_unit + sleep(3000) = 12s
-- concurrent would be ~3s (limited by longest single VM)
+### huge pages (ready but not enabled)
+- wired through make-test.nix as `hugePages = true`
+- FC docs claim up to 50% faster boot
+- requires host: pre-allocated hugetlbfs pool + sandbox path
+- also faster snapshot restore (fewer page table entries)
