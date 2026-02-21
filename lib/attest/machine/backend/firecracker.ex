@@ -320,6 +320,13 @@ defmodule Attest.Machine.Backend.Firecracker do
     :ok = snapshot_load(state, snapshot_dir)
 
     :ok = wait_for_file(state.vsock_uds_path, 30_000)
+    Logger.info("vsock UDS appeared at #{state.vsock_uds_path}")
+
+    # verify FC process is still alive after snapshot load
+    case API.get(state.api_socket_path, "/vm") do
+      {:ok, body} -> Logger.info("FC alive after restore: #{inspect(body)}")
+      {:error, reason} -> Logger.warning("FC API check failed: #{inspect(reason)}")
+    end
 
     # reconnect shell via vsock
     Logger.info("reconnecting shell via vsock for #{state.name}")

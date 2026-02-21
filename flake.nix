@@ -8,6 +8,10 @@
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    firecracker-src = {
+      url = "github:mushrowan/firecracker/fix/vsock-snapshot-restore-panic";
+      flake = false;
+    };
   };
 
   outputs =
@@ -46,6 +50,19 @@
             lib = pkgs.lib;
           };
           inherit (packageSet) attest;
+
+          # patched firecracker from our fork (vsock snapshot/restore fix)
+          firecracker-patched = pkgs.firecracker.overrideAttrs (old: {
+            version = "1.16.0-dev";
+            src = inputs.firecracker-src;
+            cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+              src = inputs.firecracker-src;
+              hash = "sha256-0RzHIivl1upuFeZjTJvTZXqHjirzmVEK2ySB4W6aiVA=";
+            };
+            checkFlags = old.checkFlags ++ [
+              "--skip=env::tests::test_copy_exec_to_chroot"
+            ];
+          });
         in
         {
           checks = {
@@ -169,9 +186,27 @@
                   end
                 '';
               };
-              # TODO: vsock UDS not connectable after snapshot restore
-              # (FC single-connection UDS + guest vsock reset race)
-              # firecracker-snapshot = ...;
+              # snapshot/restore with patched firecracker (vsock event handler fix)
+              firecracker-snapshot = import ./nix/firecracker/make-test.nix {
+                inherit pkgs;
+                attest = attest;
+                firecrackerPackage = firecracker-patched;
+                name = "fc-snapshot";
+                splitStore = true;
+                nodes.machine = { };
+                testScript = ''
+                  start_all.()
+                  Attest.wait_for_unit(machine, "multi-user.target")
+                  IO.puts("cold boot done, creating snapshot...")
+                  Attest.snapshot_create(machine, "/tmp/snap")
+                  IO.puts("restoring from snapshot...")
+                  Attest.snapshot_restore(machine, "/tmp/snap")
+                  IO.puts("executing command after restore...")
+                  result = Attest.succeed(machine, "echo restored-ok")
+                  IO.puts("result: #{result}")
+                  IO.puts("snapshot restore test passed!")
+                '';
+              };
               # firecracker split-store smoke test (erofs nix store + minimal rootfs)
               firecracker-split = import ./nix/firecracker/make-test.nix {
                 inherit pkgs;

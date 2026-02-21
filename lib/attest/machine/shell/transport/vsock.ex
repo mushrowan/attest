@@ -34,13 +34,16 @@ defmodule Attest.Machine.Shell.Transport.Vsock do
     else
       {:error, reason} when reason in [:closed, :econnrefused, :econnreset] ->
         if remaining(deadline) > 500 do
+          Logger.debug("vsock connect attempt failed: #{inspect(reason)}, retrying...")
           Process.sleep(500)
           connect_with_retry(uds_path, port, deadline)
         else
+          Logger.warning("vsock connect giving up after retries, last error: #{inspect(reason)}")
           {:error, reason}
         end
 
       {:error, reason} ->
+        Logger.warning("vsock connect failed with non-retryable error: #{inspect(reason)}")
         {:error, reason}
     end
   end

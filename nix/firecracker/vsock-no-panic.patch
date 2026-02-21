@@ -1,0 +1,67 @@
+diff --git a/src/vmm/src/devices/virtio/vsock/event_handler.rs b/src/vmm/src/devices/virtio/vsock/event_handler.rs
+index a983a33..c6b2930 100644
+--- a/src/vmm/src/devices/virtio/vsock/event_handler.rs
++++ b/src/vmm/src/devices/virtio/vsock/event_handler.rs
+@@ -60,8 +60,13 @@ where
+             error!("Failed to get vsock rx queue event: {:?}", err);
+             METRICS.rx_queue_event_fails.inc();
+         } else if self.backend.has_pending_rx() {
+-            if self.process_rx().unwrap() {
+-                used_queues.push(RXQ_INDEX.try_into().unwrap());
++            match self.process_rx() {
++                Ok(true) => used_queues.push(RXQ_INDEX.try_into().unwrap()),
++                Ok(false) => {}
++                Err(err) => {
++                    error!("vsock: process_rx failed in rxq handler: {:?}", err);
++                    METRICS.rx_queue_event_fails.inc();
++                }
+             }
+             METRICS.rx_queue_event_count.inc();
+         }
+@@ -80,15 +85,27 @@ where
+             error!("Failed to get vsock tx queue event: {:?}", err);
+             METRICS.tx_queue_event_fails.inc();
+         } else {
+-            if self.process_tx().unwrap() {
+-                used_queues.push(TXQ_INDEX.try_into().unwrap());
++            match self.process_tx() {
++                Ok(true) => used_queues.push(TXQ_INDEX.try_into().unwrap()),
++                Ok(false) => {}
++                Err(err) => {
++                    error!("vsock: process_tx failed in txq handler: {:?}", err);
++                    METRICS.tx_queue_event_fails.inc();
++                }
+             }
+             METRICS.tx_queue_event_count.inc();
+             // The backend may have queued up responses to the packets we sent during
+             // TX queue processing. If that happened, we need to fetch those responses
+             // and place them into RX buffers.
+-            if self.backend.has_pending_rx() && self.process_rx().unwrap() {
+-                used_queues.push(RXQ_INDEX.try_into().unwrap());
++            if self.backend.has_pending_rx() {
++                match self.process_rx() {
++                    Ok(true) => used_queues.push(RXQ_INDEX.try_into().unwrap()),
++                    Ok(false) => {}
++                    Err(err) => {
++                        error!("vsock: process_rx failed in txq handler: {:?}", err);
++                        METRICS.rx_queue_event_fails.inc();
++                    }
++                }
+             }
+         }
+         used_queues
+@@ -202,7 +219,13 @@ where
+                     self.handle_evq_event(evset);
+                     Vec::new()
+                 }
+-                Self::PROCESS_NOTIFY_BACKEND => self.notify_backend(evset).unwrap(),
++                Self::PROCESS_NOTIFY_BACKEND => match self.notify_backend(evset) {
++                    Ok(queues) => queues,
++                    Err(err) => {
++                        error!("vsock: notify_backend failed: {:?}", err);
++                        Vec::new()
++                    }
++                },
+                 _ => {
+                     warn!("Unexpected vsock event received: {:?}", source);
+                     Vec::new()

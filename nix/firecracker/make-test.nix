@@ -55,6 +55,8 @@
   hugePages ? false,
   # enable virtio-rng entropy device
   entropy ? true,
+  # override firecracker package (for patched builds)
+  firecrackerPackage ? pkgs.firecracker,
 }:
 let
   inherit (pkgs) lib;
@@ -184,7 +186,7 @@ let
     {
       name = nodeName;
       backend = "firecracker";
-      firecracker_bin = "${pkgs.firecracker}/bin/firecracker";
+      firecracker_bin = "${firecrackerPackage}/bin/firecracker";
       kernel_image_path = node.vmlinux;
       initrd_path = node.initrd;
       rootfs_path = "${node.rootfs}";

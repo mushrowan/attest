@@ -1,5 +1,22 @@
 {
   "nodes": {
+    "firecracker-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1771664761,
+        "narHash": "sha256-CGeWBn+EqR5cSVUV9p9XC3nODRTyyrKBUcaNwPhSsLw=",
+        "owner": "mushrowan",
+        "repo": "firecracker",
+        "rev": "06c631a141b4711c4f178ffe48927f4449f258aa",
+        "type": "github"
+      },
+      "original": {
+        "owner": "mushrowan",
+        "ref": "fix/vsock-snapshot-restore-panic",
+        "repo": "firecracker",
+        "type": "github"
+      }
+    },
     "flake-parts": {
       "inputs": {
         "nixpkgs-lib": "nixpkgs-lib"
@@ -51,6 +68,7 @@
     },
     "root": {
       "inputs": {
+        "firecracker-src": "firecracker-src",
         "flake-parts": "flake-parts",
         "nixpkgs": "nixpkgs",
         "treefmt-nix": "treefmt-nix"
