@@ -576,6 +576,14 @@ defmodule Attest.Machine do
   end
 
   @doc """
+  Get the host-side state directory for this machine
+  """
+  @spec state_dir(GenServer.server()) :: String.t()
+  def state_dir(machine) do
+    GenServer.call(machine, :state_dir)
+  end
+
+  @doc """
   Take a screenshot
   """
   @spec screenshot(GenServer.server(), String.t()) :: :ok | {:error, term()}
@@ -925,6 +933,11 @@ defmodule Attest.Machine do
     else
       {:error, _} = err -> {:reply, err, state}
     end
+  end
+
+  @impl true
+  def handle_call(:state_dir, _from, state) do
+    {:reply, state.backend_state.state_dir, state}
   end
 
   @impl true

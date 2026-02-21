@@ -57,6 +57,11 @@
   entropy ? true,
   # override firecracker package (for patched builds)
   firecrackerPackage ? pkgs.firecracker,
+  # pre-built snapshots: if true, builds snapshot derivation and restores
+  # from it instead of cold-booting. the snapshot build is cached by nix,
+  # so --rebuild only re-runs the test script from a ~128ms restore.
+  # requires kernel 6.1 or earlier in node config for FC compatibility
+  usePrebuiltSnapshots ? false,
 }:
 let
   inherit (pkgs) lib;
@@ -180,6 +185,24 @@ let
     }
   );
 
+  # pre-built snapshots (cached by nix, only rebuilt when config changes)
+  snapshots = lib.optionalAttrs usePrebuiltSnapshots (
+    import ./make-snapshot.nix {
+      inherit
+        pkgs
+        attest
+        firecrackerPackage
+        memSize
+        vcpuCount
+        entropy
+        splitStore
+        name
+        ;
+      nodes = evaluatedNodes;
+      sharedStoreImage = if splitStore then sharedStoreImage else null;
+    }
+  );
+
   # build machine config list for the driver
   machines = lib.mapAttrsToList (
     nodeName: node:
@@ -189,7 +212,9 @@ let
       firecracker_bin = "${firecrackerPackage}/bin/firecracker";
       kernel_image_path = node.vmlinux;
       initrd_path = node.initrd;
-      rootfs_path = "${node.rootfs}";
+      # when using snapshots, use the snapshot's rootfs (includes boot-time writes)
+      rootfs_path =
+        if usePrebuiltSnapshots then "${snapshots}/${nodeName}/rootfs.ext4" else "${node.rootfs}";
       kernel_boot_args = node.bootArgs;
       mem_size_mib = memSize;
       vcpu_count = vcpuCount;
@@ -207,6 +232,9 @@ let
         t.host_dev_name
         t.guest_mac
       ]) (nodeTaps nodeName);
+    }
+    // lib.optionalAttrs usePrebuiltSnapshots {
+      snapshot_path = "${snapshots}/${nodeName}";
     }
   ) evaluatedNodes;
 

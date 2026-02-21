@@ -60,6 +60,7 @@ defmodule Attest.Machine.Backend.Firecracker do
     :log_level,
     :huge_pages,
     :entropy,
+    :snapshot_path,
     :api_socket_path,
     :vsock_uds_path,
     :log_path,
@@ -94,6 +95,7 @@ defmodule Attest.Machine.Backend.Firecracker do
        log_level: Map.get(config, :log_level, "Warning"),
        huge_pages: Map.get(config, :huge_pages),
        entropy: Map.get(config, :entropy, false),
+       snapshot_path: Map.get(config, :snapshot_path),
        api_socket_path: Path.join(state_dir, "firecracker.sock"),
        vsock_uds_path: Path.join(state_dir, "v.sock"),
        log_path: Path.join(state_dir, "firecracker.log")
@@ -101,7 +103,15 @@ defmodule Attest.Machine.Backend.Firecracker do
   end
 
   @impl true
+  def start(%{snapshot_path: snap} = state) when is_binary(snap) do
+    start_from_snapshot(state)
+  end
+
   def start(state) do
+    start_cold(state)
+  end
+
+  defp start_cold(state) do
     File.mkdir_p!(state.state_dir)
     File.rm(state.api_socket_path)
     File.rm(state.vsock_uds_path)
@@ -126,10 +136,33 @@ defmodule Attest.Machine.Backend.Firecracker do
     Logger.info("booting firecracker VM #{state.name}")
     :ok = API.put(state.api_socket_path, "/actions", %{"action_type" => "InstanceStart"})
 
-    # wait for vsock UDS
+    # wait for vsock UDS and connect shell
+    connect_shell(state)
+  end
+
+  defp start_from_snapshot(state) do
+    File.mkdir_p!(state.state_dir)
+    File.rm(state.api_socket_path)
+    File.rm(state.vsock_uds_path)
+
+    Logger.info("restoring #{state.name} from pre-built snapshot #{state.snapshot_path}")
+
+    cmd = "#{state.firecracker_bin} --api-sock #{state.api_socket_path}"
+
+    port =
+      Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout])
+
+    state = %{state | fc_port: port}
+
+    :ok = wait_for_file(state.api_socket_path, 10_000)
+    :ok = snapshot_load(state, state.snapshot_path)
+
+    connect_shell(state)
+  end
+
+  defp connect_shell(state) do
     :ok = wait_for_file(state.vsock_uds_path, 30_000)
 
-    # connect shell via vsock
     Logger.info("connecting shell via vsock for #{state.name}")
 
     {:ok, shell} =

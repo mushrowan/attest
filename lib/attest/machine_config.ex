@@ -121,10 +121,18 @@ defmodule Attest.MachineConfig do
           %{tap_interfaces: parsed}
       end
 
+    # pre-built snapshot path for fast restore instead of cold boot
+    snapshot =
+      case Map.get(m, "snapshot_path") do
+        nil -> %{}
+        path -> %{snapshot_path: path}
+      end
+
     base
     |> Map.merge(optional_fields)
     |> Map.merge(extra_drives)
     |> Map.merge(tap_interfaces)
+    |> Map.merge(snapshot)
   end
 
   defp parse_machine(%{"backend" => "cloud-hypervisor"} = m, state_dir) do

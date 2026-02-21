@@ -120,7 +120,7 @@ defmodule Attest.CLI do
     # VM state (sockets, disk images) goes in a writable temp dir
     # output_dir (-o) is for screenshots and test artifacts only
     tmp_dir = System.tmp_dir!()
-    state_dir = Path.join(tmp_dir, "vm-state-#{:rand.uniform(1_000_000)}")
+    state_dir = Path.join(tmp_dir, "vm-state")
     File.mkdir_p!(state_dir)
     out_dir = opts.output_dir || state_dir
 

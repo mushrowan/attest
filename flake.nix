@@ -211,6 +211,30 @@
                   IO.puts("snapshot restore test passed!")
                 '';
               };
+              # pre-built snapshot: VM boots from cached snapshot (~128ms restore)
+              firecracker-prebuilt = import ./nix/firecracker/make-test.nix {
+                inherit pkgs;
+                attest = attest;
+                name = "fc-prebuilt";
+                splitStore = true;
+                usePrebuiltSnapshots = true;
+                nodes.machine = {
+                  boot.kernelPackages = pkgs.linuxPackages_6_1;
+                };
+                testScript = ''
+                  start_all.()
+
+                  # VM should already be at multi-user.target (restored from snapshot)
+                  output = Attest.succeed(machine, "systemctl is-active multi-user.target")
+                  IO.puts("multi-user.target: #{String.trim(output)}")
+
+                  output = Attest.succeed(machine, "echo hello-from-prebuilt-snapshot")
+                  unless String.contains?(output, "hello-from-prebuilt-snapshot") do
+                    raise "unexpected: #{inspect(output)}"
+                  end
+                  IO.puts("pre-built snapshot test passed!")
+                '';
+              };
               # firecracker split-store smoke test (erofs nix store + minimal rootfs)
               firecracker-split = import ./nix/firecracker/make-test.nix {
                 inherit pkgs;

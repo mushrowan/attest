@@ -337,6 +337,14 @@ defmodule Attest do
   end
 
   @doc """
+  Get the host-side state directory for a machine
+  """
+  @spec state_dir(GenServer.server()) :: String.t()
+  def state_dir(machine) do
+    Machine.state_dir(machine)
+  end
+
+  @doc """
   Restore a VM from a snapshot (firecracker only)
   """
   @spec snapshot_restore(GenServer.server(), String.t()) :: :ok | {:error, term()}
