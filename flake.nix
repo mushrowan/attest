@@ -186,14 +186,18 @@
                   end
                 '';
               };
-              # snapshot/restore with patched firecracker (vsock event handler fix)
+              # snapshot/restore
               firecracker-snapshot = import ./nix/firecracker/make-test.nix {
                 inherit pkgs;
                 attest = attest;
-                firecrackerPackage = firecracker-patched;
                 name = "fc-snapshot";
                 splitStore = true;
-                nodes.machine = { };
+                nodes.machine = {
+                  # FC snapshot/restore only works with guest kernels 5.10 and 6.1
+                  # (newer kernels triple-fault ~1s after restore)
+                  # https://github.com/firecracker-microvm/firecracker/blob/main/docs/kernel-policy.md
+                  boot.kernelPackages = pkgs.linuxPackages_6_1;
+                };
                 testScript = ''
                   start_all.()
                   Attest.wait_for_unit(machine, "multi-user.target")
