@@ -3,11 +3,10 @@
 ## current benchmark (railscale, `nix build --rebuild`)
 
 ```
-test                       python/QEMU  attest/FC  speedup
-module-smoke (4 VMs)            41s        47s      0.8x
-policy-reload (1 VM)            24s        10s      2.4x
-cli-integration (3 VMs)        383s       261s      1.4x
-TOTAL                          448s       318s      1.4x
+test                       python/QEMU  attest/FC  FC+snapshot  speedup
+policy-reload (1 VM)            27s        11s         5s        5.4x
+module-smoke (4 VMs)            41s        48s         -         0.8x
+cli-integration (3 VMs)        402s       265s         -         1.5x
 ```
 
 ## done
@@ -21,27 +20,34 @@ TOTAL                          448s       318s      1.4x
 - [x] `Attest.wait_all/2` — concurrent multi-machine operations
 - [x] firecracker fork infrastructure (`mushrowan/firecracker`, flake input, update script)
 - [x] `firecrackerPackage` parameter in make-test.nix
-- [x] **snapshot/restore working** — root cause was guest kernel 6.18 triple-faulting after restore. FC only supports 5.10/6.1 for snapshots. using `linuxPackages_6_1` fixes it. vsock muxer was fine all along
+- [x] **snapshot/restore working** — kernel 6.1 fix, vsock muxer was fine
+- [x] **pre-built snapshot derivations** — `usePrebuiltSnapshots = true` in make-test.nix
+  - `make-snapshot.nix` boots VMs, snapshots at multi-user.target (cached by nix)
+  - `--rebuild` only re-runs test script, not the boot
+  - VM restore in ~87ms, policy-reload down from 11s to 5s
+- [x] benchmark snapshot restore in railscale (`policy-reload-snapshot.nix`)
+- [x] deterministic state dir (dropped random suffix so snapshot paths match)
 
 ## remaining
 
-### 7. mix release instead of escript
+### mix release instead of escript
 - [ ] switch from escript to mix release in package.nix
 - saves ~600ms per test run (no BEAM decompression)
 
-### 8. nix eval overhead
+### nix eval overhead
 - [ ] profile make-test.nix evaluation time
 - module-smoke: ~27s nix eval + sandbox vs ~20s VM execution
 - python's simpler nix expressions eval faster
+- snapshot tests amplify this: 87ms restore but 30s nix overhead
 
-### 9. use wait_all in railscale test scripts
+### use wait_all in railscale test scripts
 - [x] `Attest.wait_all/2` implemented and tested
 - [ ] update module-smoke-attest.nix in railscale to use it
 
-### snapshot/restore follow-ups
-- [ ] expose `snapshotKernelPackages` option in make-test.nix for tests that use snapshots
-- [ ] benchmark snapshot restore time (should be ~85ms from earlier tests)
-- [ ] wire snapshot/restore into railscale tests for fast multi-VM cloning
+### snapshot multi-VM tests
+- [ ] snapshot-backed module-smoke (4 VMs restored from snapshots)
+- [ ] snapshot-backed cli-integration (3 VMs)
+- each node has different NixOS config so needs separate snapshot
 
 ### huge pages (ready but not enabled)
 - wired through make-test.nix as `hugePages = true`
