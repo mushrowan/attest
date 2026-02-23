@@ -4,7 +4,17 @@
 
 214 tests, `nix flake check` green
 
-### closure optimisation results
+### benchmark (railscale, `nix build --rebuild`, warm cache)
+
+```
+test                       python/QEMU  attest/FC  FC+snapshot  speedup
+module-smoke (4 VMs)            28s         9s         -         3.1x
+policy-reload (1 VM)            22s         7s         3s        3.1-7.3x
+cli-integration (3 VMs)        377s       259s         -         1.4x
+TOTAL                          427s       275s         -         1.5x
+```
+
+### closure optimisation
 
 ```
                    before    after     reduction
@@ -15,28 +25,13 @@ total              7.8GB     2.5GB     -68%
 
 ### snapshot/restore
 
-- root cause of original failure: guest kernel 6.18 triple-faults after restore
-- fix: `boot.kernelPackages = pkgs.linuxPackages_6_1` (FC supports 5.10/6.1 only)
-- vsock muxer works fine — the VM itself was crashing
 - pre-built snapshot support: `usePrebuiltSnapshots = true` in make-test.nix
-  - snapshot derivation cached by nix (only rebuilds when NixOS config changes)
-  - test restores from snapshot in ~87ms instead of ~5s cold boot
-  - `nix build --rebuild` only re-runs the test script
+- snapshot derivation cached by nix (only rebuilds when NixOS config changes)
+- VM restore in ~87ms, policy-reload 7s → 3s with snapshots
 
-### benchmark (railscale, `nix build --rebuild`)
+### recent refactoring
 
-```
-test                         python/QEMU  attest/FC  FC+snapshot  speedup
-policy-reload (1 VM)              27s        11s         5s        5.4x
-module-smoke (4 VMs)              41s        48s         -         0.8x
-cli-integration (3 VMs)          402s       265s         -         1.5x
-```
-
-## recent changes
-
-- snapshot/restore working with kernel 6.1
-- pre-built snapshot derivation (make-snapshot.nix)
-- `usePrebuiltSnapshots` option in make-test.nix
-- `Attest.state_dir/1` API
-- firecracker fork as flake input with update script
-- deterministic state dir (no random suffix)
+- extracted keyboard module (machine/keyboard.ex)
+- shared backend helpers in Backend module (wait_for_file, close_port, etc)
+- deduplicated FC/CH machine config parsing
+- net -70 lines across all changes

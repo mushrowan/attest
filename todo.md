@@ -1,12 +1,13 @@
 # performance todo
 
-## current benchmark (railscale, `nix build --rebuild`)
+## current benchmark (railscale, `nix build --rebuild`, warm cache)
 
 ```
 test                       python/QEMU  attest/FC  FC+snapshot  speedup
-policy-reload (1 VM)            23s         7s         5s        3.3-4.6x
-module-smoke (4 VMs)            41s        48s         -         0.8x
-cli-integration (3 VMs)        402s       265s         -         1.5x
+module-smoke (4 VMs)            28s         9s         -         3.1x
+policy-reload (1 VM)            22s         7s         3s        3.1-7.3x
+cli-integration (3 VMs)        377s       259s         -         1.4x
+TOTAL                          427s       275s         -         1.5x
 ```
 
 ## done
@@ -24,30 +25,27 @@ cli-integration (3 VMs)        402s       265s         -         1.5x
 - [x] snapshot/restore working — kernel 6.1 fix
 - [x] pre-built snapshot derivations — `usePrebuiltSnapshots = true`
 - [x] deterministic state dir
-- [x] ~~mix release~~ — measured escript startup at 170ms, not worth switching
+- [x] ~~mix release~~ — escript startup is 170ms, not worth switching
+- [x] ~~module-smoke 0.8x regression~~ — was nix eval overhead, actual is 3.1x faster
 - [x] refactor: keyboard module, shared backend helpers, deduplicated config parsing
 
 ## remaining
 
+### cli-integration 1.4x
+- [ ] profile where the remaining gap is (259s vs 377s)
+- mostly sequential test steps, limited parallelism opportunity
+- might benefit from snapshot restore for the 3 VMs
+
 ### nix eval overhead
-- [ ] profile make-test.nix evaluation time
-- attest: 11s eval vs python: 7s eval (warm cache)
-- module-smoke: 19s eval (4 NixOS module evaluations)
-- inherent to NixOS module system, limited scope for improvement
-- `--rebuild` only adds ~0.6s over the test execution time itself
+- attest: 11-19s eval vs python: 7s eval (warm cache)
+- inherent to NixOS module system for each guest config
+- not measured in --rebuild benchmarks (only affects first build)
+- possible fix: pre-evaluate and cache NixOS module output
 
 ### snapshot multi-VM tests
-- [ ] snapshot-backed module-smoke (4 VMs restored from snapshots)
 - [ ] snapshot-backed cli-integration (3 VMs)
-- note: `--rebuild` rebuilds snapshot derivation too, so no benefit for benchmarks
-- benefit is for real dev workflow: change test script, snapshot stays cached
-
-### module-smoke 0.8x regression
-- [ ] profile why 4-VM attest is slower than python
-- likely: sequential nix eval of 4 NixOS configs + erofs build
-- python parallel-evaluates via lib/testing/nodes.nix
+- benefit is for dev workflow: change test script, snapshot stays cached
 
 ### huge pages (ready but not enabled)
 - wired through make-test.nix as `hugePages = true`
-- FC docs claim up to 50% faster boot
 - requires host: pre-allocated hugetlbfs pool + sandbox path
