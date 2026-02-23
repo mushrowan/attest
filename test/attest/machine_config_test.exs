@@ -149,6 +149,47 @@ defmodule Attest.MachineConfigTest do
       assert fc.backend == Attest.Machine.Backend.Firecracker
     end
 
+    test "firecracker snapshot_path is parsed" do
+      json =
+        Jason.encode!(%{
+          "machines" => [
+            %{
+              "name" => "snap",
+              "backend" => "firecracker",
+              "firecracker_bin" => "/bin/false",
+              "kernel_image_path" => "/bin/false",
+              "rootfs_path" => "/nix/store/rootfs.ext4",
+              "snapshot_path" => "/nix/store/snapshots/snap"
+            }
+          ]
+        })
+
+      path = write_tmp_json(json)
+      config = MachineConfig.parse_file(path, state_dir: "/tmp/state")
+      [machine] = config.machines
+      assert machine.snapshot_path == "/nix/store/snapshots/snap"
+    end
+
+    test "firecracker without snapshot_path omits the key" do
+      json =
+        Jason.encode!(%{
+          "machines" => [
+            %{
+              "name" => "nosnap",
+              "backend" => "firecracker",
+              "firecracker_bin" => "/bin/false",
+              "kernel_image_path" => "/bin/false",
+              "rootfs_path" => "/nix/store/rootfs.ext4"
+            }
+          ]
+        })
+
+      path = write_tmp_json(json)
+      config = MachineConfig.parse_file(path, state_dir: "/tmp/state")
+      [machine] = config.machines
+      refute Map.has_key?(machine, :snapshot_path)
+    end
+
     test "defaults vlans to empty and timeout to 3600s" do
       json = Jason.encode!(%{"machines" => []})
       path = write_tmp_json(json)

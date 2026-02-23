@@ -60,6 +60,31 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
       assert {:ok, state} = Firecracker.init(config)
       assert state.entropy == true
     end
+
+    test "stores snapshot_path when set" do
+      config = %{
+        name: "snap-init",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4",
+        snapshot_path: "/nix/store/snap/machine"
+      }
+
+      assert {:ok, state} = Firecracker.init(config)
+      assert state.snapshot_path == "/nix/store/snap/machine"
+    end
+
+    test "defaults snapshot_path to nil" do
+      config = %{
+        name: "snap-default",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4"
+      }
+
+      assert {:ok, state} = Firecracker.init(config)
+      assert state.snapshot_path == nil
+    end
   end
 
   describe "capabilities/1" do
