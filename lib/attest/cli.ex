@@ -101,7 +101,7 @@ defmodule Attest.CLI do
         run_test(opts)
 
       true ->
-        IO.puts("attest-ng v#{Application.spec(:attest, :vsn)}")
+        IO.puts("attest v#{Application.spec(:attest, :vsn)}")
         IO.puts("use --help for usage")
     end
   end
@@ -198,7 +198,7 @@ defmodule Attest.CLI do
 
   defp print_help do
     IO.puts("""
-    attest-ng - NixOS test driver in Elixir
+    attest - NixOS test driver in Elixir
 
     usage: attest [options] [test-script]
 
