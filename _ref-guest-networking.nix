@@ -1,1 +1,0 @@
-/home/rowan/dev/nix/nixpkgs/nixos/modules/virtualisation/guest-networking-options.nix

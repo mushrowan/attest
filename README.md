@@ -9,7 +9,7 @@ instead of python.
 ```nix
 # flake.nix
 {
-  inputs.attest.url = "github:yourusername/attest";
+  inputs.attest.url = "github:mushrowan/attest";
 
   outputs = { attest, nixpkgs, ... }:
     let pkgs = nixpkgs.legacyPackages.x86_64-linux;
@@ -160,7 +160,7 @@ fc-snapshot:      cold=5354  restore=80
 ## development
 
 ```bash
-mix test                    # unit tests (208 tests)
+mix test                    # unit tests (225 tests)
 mix format                  # format
 nix flake check --quiet     # full check: build, format, tests, integration
 iex -S mix                  # repl
