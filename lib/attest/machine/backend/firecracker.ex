@@ -142,22 +142,45 @@ defmodule Attest.Machine.Backend.Firecracker do
 
   defp start_from_snapshot(state) do
     File.mkdir_p!(state.state_dir)
-    File.rm(state.api_socket_path)
-    File.rm(state.vsock_uds_path)
 
     Logger.info("restoring #{state.name} from pre-built snapshot #{state.snapshot_path}")
 
+    state = spawn_and_load_snapshot(state, state.snapshot_path)
+    connect_shell(state)
+  end
+
+  defp spawn_and_load_snapshot(state, snapshot_dir) do
+    File.rm(state.api_socket_path)
+    File.rm(state.vsock_uds_path)
+
     cmd = "#{state.firecracker_bin} --api-sock #{state.api_socket_path}"
-
-    port =
-      Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout])
-
-    state = %{state | fc_port: port}
+    port = Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout])
+    state = %{state | fc_port: port, port_exited: false, shell: nil}
 
     :ok = wait_for_file(state.api_socket_path, 10_000)
-    :ok = snapshot_load(state, state.snapshot_path)
+    :ok = snapshot_load(state, snapshot_dir)
 
-    connect_shell(state)
+    state
+  end
+
+  defp stop_fc_process(state) do
+    stop_shell(state.shell)
+    close_port(state.fc_port)
+    File.rm(state.api_socket_path)
+  end
+
+  defp stop_shell(nil), do: :ok
+
+  defp stop_shell(pid) do
+    if Process.alive?(pid), do: GenServer.stop(pid, :normal)
+  end
+
+  defp close_port(nil), do: :ok
+
+  defp close_port(port) do
+    Port.close(port)
+  rescue
+    ArgumentError -> :ok
   end
 
   defp connect_shell(state) do
@@ -214,15 +237,7 @@ defmodule Attest.Machine.Backend.Firecracker do
         :ok
 
       {:error, :timeout} ->
-        # force kill via port close
-        if state.fc_port do
-          try do
-            Port.close(state.fc_port)
-          rescue
-            ArgumentError -> :ok
-          end
-        end
-
+        close_port(state.fc_port)
         cleanup(state)
         :ok
     end
@@ -235,21 +250,10 @@ defmodule Attest.Machine.Backend.Firecracker do
 
   @impl true
   def cleanup(state) do
-    if state.shell && Process.alive?(state.shell) do
-      GenServer.stop(state.shell, :normal)
-    end
-
-    if state.fc_port do
-      try do
-        Port.close(state.fc_port)
-      rescue
-        ArgumentError -> :ok
-      end
-    end
-
+    stop_shell(state.shell)
+    close_port(state.fc_port)
     File.rm(state.api_socket_path)
     File.rm(state.vsock_uds_path)
-
     :ok
   end
 
@@ -320,55 +324,12 @@ defmodule Attest.Machine.Backend.Firecracker do
   def restore_from_snapshot(state, snapshot_dir) do
     Logger.info("restoring #{state.name} from snapshot in #{snapshot_dir}")
 
-    # kill old shell
-    if state.shell && Process.alive?(state.shell) do
-      GenServer.stop(state.shell, :normal)
-    end
-
-    # kill old FC process
-    if state.fc_port do
-      try do
-        Port.close(state.fc_port)
-      rescue
-        ArgumentError -> :ok
-      end
-    end
-
-    # clean up old sockets and wait until gone (old FC may linger)
-    File.rm(state.api_socket_path)
+    # tear down existing FC process and shell
+    stop_fc_process(state)
     wait_for_file_gone(state.vsock_uds_path, 5_000)
 
-    # spawn fresh firecracker process
-    cmd = "#{state.firecracker_bin} --api-sock #{state.api_socket_path}"
-
-    port =
-      Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout])
-
-    state = %{state | fc_port: port, port_exited: false, shell: nil}
-
-    # wait for API socket
-    :ok = wait_for_file(state.api_socket_path, 10_000)
-
-    # load snapshot and resume in one call
-    :ok = snapshot_load(state, snapshot_dir)
-
-    :ok = wait_for_file(state.vsock_uds_path, 30_000)
-    Logger.info("vsock UDS appeared at #{state.vsock_uds_path}")
-
-    # reconnect shell via vsock
-    Logger.info("reconnecting shell via vsock for #{state.name}")
-
-    {:ok, shell} =
-      Shell.start_link(
-        socket_path: state.vsock_uds_path,
-        transport: Vsock,
-        transport_config: %{uds_path: state.vsock_uds_path, port: state.vsock_port}
-      )
-
-    :ok = Shell.wait_for_connection(shell, 120_000)
-    state = %{state | shell: shell}
-
-    {:ok, shell, state}
+    state = spawn_and_load_snapshot(state, snapshot_dir)
+    connect_shell(state)
   end
 
   # network control via host-side ip link commands

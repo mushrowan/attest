@@ -180,14 +180,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
 
           {:error, :timeout} ->
             # last resort: close port
-            if state.ch_port do
-              try do
-                Port.close(state.ch_port)
-              rescue
-                ArgumentError -> :ok
-              end
-            end
-
+            close_port(state.ch_port)
             cleanup(state)
             :ok
         end
@@ -201,21 +194,10 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
 
   @impl true
   def cleanup(state) do
-    if state.shell && Process.alive?(state.shell) do
-      GenServer.stop(state.shell, :normal)
-    end
-
-    if state.ch_port do
-      try do
-        Port.close(state.ch_port)
-      rescue
-        ArgumentError -> :ok
-      end
-    end
-
+    stop_shell(state.shell)
+    close_port(state.ch_port)
     File.rm(state.api_socket_path)
     File.rm(state.vsock_uds_path)
-
     :ok
   end
 
@@ -323,6 +305,17 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
       end)
 
     Map.put(map, "net", net)
+  end
+
+  defp stop_shell(nil), do: :ok
+  defp stop_shell(pid), do: if(Process.alive?(pid), do: GenServer.stop(pid, :normal))
+
+  defp close_port(nil), do: :ok
+
+  defp close_port(port) do
+    Port.close(port)
+  rescue
+    ArgumentError -> :ok
   end
 
   defp wait_for_file(path, timeout) do
