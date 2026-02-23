@@ -97,7 +97,16 @@ pkgs.runCommand "vm-snapshots-${name}"
       --set machineConfig "${machineConfigFile}" \
       --set testScript "${testScriptFile}"
 
-    $TMPDIR/driver/bin/attest-driver
+    if ! $TMPDIR/driver/bin/attest-driver; then
+      echo "=== snapshot builder failed, dumping FC logs ==="
+      for logfile in /build/vm-state/*/firecracker.log; do
+        if [ -f "$logfile" ]; then
+          echo "--- $logfile ---"
+          cat "$logfile"
+        fi
+      done
+      exit 1
+    fi
 
     # copy snapshot outputs
     cp -r /tmp/snapshot-out $out
