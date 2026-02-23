@@ -51,23 +51,27 @@ let
     IO.puts("all snapshots ready")
   '';
 
-  machines = lib.mapAttrsToList (nodeName: node: {
-    name = nodeName;
-    backend = "firecracker";
-    firecracker_bin = "${firecrackerPackage}/bin/firecracker";
-    kernel_image_path = node.vmlinux;
-    initrd_path = node.initrd;
-    rootfs_path = "${node.rootfs}";
-    kernel_boot_args = node.bootArgs;
-    mem_size_mib = memSize;
-    vcpu_count = vcpuCount;
-    inherit entropy;
-  } // lib.optionalAttrs (splitStore && sharedStoreImage != null) {
-    store_image_path = "${sharedStoreImage}";
-  }) nodes;
+  machines = lib.mapAttrsToList (
+    nodeName: node:
+    {
+      name = nodeName;
+      backend = "firecracker";
+      firecracker_bin = "${firecrackerPackage}/bin/firecracker";
+      kernel_image_path = node.vmlinux;
+      initrd_path = node.initrd;
+      rootfs_path = "${node.rootfs}";
+      kernel_boot_args = node.bootArgs;
+      mem_size_mib = memSize;
+      vcpu_count = vcpuCount;
+      inherit entropy;
+    }
+    // lib.optionalAttrs (splitStore && sharedStoreImage != null) {
+      store_image_path = "${sharedStoreImage}";
+    }
+  ) nodes;
 
   machineConfigJson = builtins.toJSON {
-    vlans = [];
+    vlans = [ ];
     global_timeout = 300;
     inherit machines;
   };
@@ -76,21 +80,26 @@ let
   testScriptFile = pkgs.writeText "snapshot-script-${name}.exs" testScript;
 
 in
-pkgs.runCommand "vm-snapshots-${name}" {
-  requiredSystemFeatures = [ "nixos-test" "kvm" ];
-  nativeBuildInputs = [ pkgs.makeWrapper ];
-} ''
-  export HOME=$TMPDIR
-  mkdir -p /tmp/snapshot-out
+pkgs.runCommand "vm-snapshots-${name}"
+  {
+    requiredSystemFeatures = [
+      "nixos-test"
+      "kvm"
+    ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+  }
+  ''
+    export HOME=$TMPDIR
+    mkdir -p /tmp/snapshot-out
 
-  # build driver wrapper
-  mkdir -p $TMPDIR/driver/bin
-  makeWrapper ${attest}/bin/attest $TMPDIR/driver/bin/attest-driver \
-    --set machineConfig "${machineConfigFile}" \
-    --set testScript "${testScriptFile}"
+    # build driver wrapper
+    mkdir -p $TMPDIR/driver/bin
+    makeWrapper ${attest}/bin/attest $TMPDIR/driver/bin/attest-driver \
+      --set machineConfig "${machineConfigFile}" \
+      --set testScript "${testScriptFile}"
 
-  $TMPDIR/driver/bin/attest-driver
+    $TMPDIR/driver/bin/attest-driver
 
-  # copy snapshot outputs
-  cp -r /tmp/snapshot-out $out
-''
+    # copy snapshot outputs
+    cp -r /tmp/snapshot-out $out
+  ''

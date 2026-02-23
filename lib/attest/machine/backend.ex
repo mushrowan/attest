@@ -41,4 +41,87 @@ defmodule Attest.Machine.Backend do
 
   # introspection
   @callback capabilities(state) :: [:screenshot | :send_key | :network_control | :port_forward]
+
+  # shared helpers for microVM backends
+
+  @doc """
+  Poll for a file to appear on disk
+  """
+  @spec wait_for_file(String.t(), timeout()) :: :ok | {:error, {:file_timeout, String.t()}}
+  def wait_for_file(path, timeout) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    poll_file(path, deadline)
+  end
+
+  @doc """
+  Poll until a file is removed from disk
+  """
+  @spec wait_for_file_gone(String.t(), timeout()) :: :ok
+  def wait_for_file_gone(path, timeout) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    poll_file_gone(path, deadline)
+  end
+
+  @doc """
+  Close a port safely, ignoring ArgumentError if already closed
+  """
+  @spec close_port(port() | nil) :: :ok
+  def close_port(nil), do: :ok
+
+  def close_port(port) do
+    Port.close(port)
+    :ok
+  rescue
+    ArgumentError -> :ok
+  end
+
+  @doc """
+  Stop a shell GenServer if alive
+  """
+  @spec stop_shell(pid() | nil) :: :ok
+  def stop_shell(nil), do: :ok
+  def stop_shell(pid), do: if(Process.alive?(pid), do: GenServer.stop(pid, :normal), else: :ok)
+
+  @doc """
+  Wait for a port process to exit
+  """
+  @spec wait_for_process_exit(port() | nil, boolean(), timeout()) :: :ok | {:error, :timeout}
+  def wait_for_process_exit(nil, _exited, _timeout), do: :ok
+  def wait_for_process_exit(_port, true, _timeout), do: :ok
+
+  def wait_for_process_exit(port, _exited, timeout) do
+    receive do
+      {^port, {:exit_status, _code}} -> :ok
+    after
+      timeout -> {:error, :timeout}
+    end
+  end
+
+  defp poll_file(path, deadline) do
+    if File.exists?(path) do
+      :ok
+    else
+      if System.monotonic_time(:millisecond) >= deadline do
+        {:error, {:file_timeout, path}}
+      else
+        Process.sleep(50)
+        poll_file(path, deadline)
+      end
+    end
+  end
+
+  defp poll_file_gone(path, deadline) do
+    if File.exists?(path) do
+      File.rm(path)
+
+      if System.monotonic_time(:millisecond) >= deadline do
+        :ok
+      else
+        Process.sleep(50)
+        poll_file_gone(path, deadline)
+      end
+    else
+      :ok
+    end
+  end
 end

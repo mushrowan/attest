@@ -169,19 +169,8 @@ defmodule Attest.Machine.Backend.Firecracker do
     File.rm(state.api_socket_path)
   end
 
-  defp stop_shell(nil), do: :ok
-
-  defp stop_shell(pid) do
-    if Process.alive?(pid), do: GenServer.stop(pid, :normal)
-  end
-
-  defp close_port(nil), do: :ok
-
-  defp close_port(port) do
-    Port.close(port)
-  rescue
-    ArgumentError -> :ok
-  end
+  defp stop_shell(pid), do: Attest.Machine.Backend.stop_shell(pid)
+  defp close_port(port), do: Attest.Machine.Backend.close_port(port)
 
   defp connect_shell(state) do
     :ok = wait_for_file(state.vsock_uds_path, 30_000)
@@ -450,52 +439,11 @@ defmodule Attest.Machine.Backend.Firecracker do
     :ok
   end
 
-  defp wait_for_file_gone(path, timeout) do
-    deadline = System.monotonic_time(:millisecond) + timeout
-    do_wait_for_file_gone(path, deadline)
-  end
+  defp wait_for_file(path, timeout), do: Attest.Machine.Backend.wait_for_file(path, timeout)
 
-  defp do_wait_for_file_gone(path, deadline) do
-    if File.exists?(path) do
-      File.rm(path)
+  defp wait_for_file_gone(path, timeout),
+    do: Attest.Machine.Backend.wait_for_file_gone(path, timeout)
 
-      if System.monotonic_time(:millisecond) >= deadline do
-        :ok
-      else
-        Process.sleep(50)
-        do_wait_for_file_gone(path, deadline)
-      end
-    else
-      :ok
-    end
-  end
-
-  defp wait_for_file(path, timeout) do
-    deadline = System.monotonic_time(:millisecond) + timeout
-    do_wait_for_file(path, deadline)
-  end
-
-  defp do_wait_for_file(path, deadline) do
-    if File.exists?(path) do
-      :ok
-    else
-      if System.monotonic_time(:millisecond) >= deadline do
-        {:error, {:file_timeout, path}}
-      else
-        Process.sleep(50)
-        do_wait_for_file(path, deadline)
-      end
-    end
-  end
-
-  defp wait_for_process_exit(%{fc_port: nil}, _timeout), do: :ok
-  defp wait_for_process_exit(%{port_exited: true}, _timeout), do: :ok
-
-  defp wait_for_process_exit(%{fc_port: port}, timeout) do
-    receive do
-      {^port, {:exit_status, _code}} -> :ok
-    after
-      timeout -> {:error, :timeout}
-    end
-  end
+  defp wait_for_process_exit(state, timeout),
+    do: Attest.Machine.Backend.wait_for_process_exit(state.fc_port, state.port_exited, timeout)
 end

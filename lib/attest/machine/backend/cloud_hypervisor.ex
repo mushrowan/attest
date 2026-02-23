@@ -307,43 +307,10 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
     Map.put(map, "net", net)
   end
 
-  defp stop_shell(nil), do: :ok
-  defp stop_shell(pid), do: if(Process.alive?(pid), do: GenServer.stop(pid, :normal))
+  defp stop_shell(pid), do: Attest.Machine.Backend.stop_shell(pid)
+  defp close_port(port), do: Attest.Machine.Backend.close_port(port)
+  defp wait_for_file(path, timeout), do: Attest.Machine.Backend.wait_for_file(path, timeout)
 
-  defp close_port(nil), do: :ok
-
-  defp close_port(port) do
-    Port.close(port)
-  rescue
-    ArgumentError -> :ok
-  end
-
-  defp wait_for_file(path, timeout) do
-    deadline = System.monotonic_time(:millisecond) + timeout
-    do_wait_for_file(path, deadline)
-  end
-
-  defp do_wait_for_file(path, deadline) do
-    if File.exists?(path) do
-      :ok
-    else
-      if System.monotonic_time(:millisecond) >= deadline do
-        {:error, {:file_timeout, path}}
-      else
-        Process.sleep(50)
-        do_wait_for_file(path, deadline)
-      end
-    end
-  end
-
-  defp wait_for_process_exit(%{ch_port: nil}, _timeout), do: :ok
-  defp wait_for_process_exit(%{port_exited: true}, _timeout), do: :ok
-
-  defp wait_for_process_exit(%{ch_port: port}, timeout) do
-    receive do
-      {^port, {:exit_status, _code}} -> :ok
-    after
-      timeout -> {:error, :timeout}
-    end
-  end
+  defp wait_for_process_exit(state, timeout),
+    do: Attest.Machine.Backend.wait_for_process_exit(state.ch_port, state.port_exited, timeout)
 end
