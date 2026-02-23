@@ -21,10 +21,15 @@
   vcpuCount ? 1,
   entropy ? true,
   splitStore ? false,
+  # networking: TAP interface configs per node + bridge setup script
+  # needed so the guest NixOS config matches the VM's available devices
+  tapInterfaces ? { },
+  networkSetupScript ? "",
 }:
 let
   inherit (pkgs) lib;
 
+  hasNetwork = networkSetupScript != "";
   sortedNames = lib.sort (a: b: a < b) (builtins.attrNames nodes);
 
   # elixir test script: boot each VM sequentially, snapshot, then kill
@@ -67,16 +72,25 @@ let
     // lib.optionalAttrs (splitStore && sharedStoreImage != null) {
       store_image_path = "${sharedStoreImage}";
     }
+    // lib.optionalAttrs (tapInterfaces ? ${nodeName}) {
+      tap_interfaces = tapInterfaces.${nodeName};
+    }
   ) nodes;
 
   machineConfigJson = builtins.toJSON {
     vlans = [ ];
-    global_timeout = 300;
+    global_timeout = 600;
     inherit machines;
   };
 
   machineConfigFile = pkgs.writeText "machine-config-snapshot-${name}.json" machineConfigJson;
   testScriptFile = pkgs.writeText "snapshot-script-${name}.exs" testScript;
+
+  wrapCmd =
+    if hasNetwork then
+      "${pkgs.util-linux}/bin/unshare --user --map-root-user --net ${pkgs.bash}/bin/bash -e"
+    else
+      "${pkgs.bash}/bin/bash -e";
 
 in
 pkgs.runCommand "vm-snapshots-${name}"
@@ -85,7 +99,12 @@ pkgs.runCommand "vm-snapshots-${name}"
       "nixos-test"
       "kvm"
     ];
-    nativeBuildInputs = [ pkgs.makeWrapper ];
+    nativeBuildInputs = [
+      pkgs.makeWrapper
+    ]
+    ++ lib.optionals hasNetwork [
+      pkgs.iproute2
+    ];
   }
   ''
     export HOME=$TMPDIR
@@ -97,6 +116,13 @@ pkgs.runCommand "vm-snapshots-${name}"
       --set machineConfig "${machineConfigFile}" \
       --set testScript "${testScriptFile}"
 
+    ${wrapCmd} <<'INNER_SCRIPT'
+    ${lib.optionalString hasNetwork ''
+      ip link set lo up
+    ''}
+
+    ${networkSetupScript}
+
     if ! $TMPDIR/driver/bin/attest-driver; then
       echo "=== snapshot builder failed, dumping FC logs ==="
       for logfile in /build/vm-state/*/firecracker.log; do
@@ -107,6 +133,7 @@ pkgs.runCommand "vm-snapshots-${name}"
       done
       exit 1
     fi
+    INNER_SCRIPT
 
     # copy snapshot outputs
     cp -r /tmp/snapshot-out $out

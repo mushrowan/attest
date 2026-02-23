@@ -185,6 +185,22 @@ let
     }
   );
 
+  # TAP interfaces per node (for snapshot builder + test runner)
+  allTapInterfaces = lib.optionalAttrs hasNetwork (
+    lib.listToAttrs (
+      map (
+        nodeName:
+        lib.nameValuePair nodeName (
+          map (t: [
+            t.iface_id
+            t.host_dev_name
+            t.guest_mac
+          ]) (nodeTaps nodeName)
+        )
+      ) sortedNames
+    )
+  );
+
   # pre-built snapshots (cached by nix, only rebuilt when config changes)
   snapshots = lib.optionalAttrs usePrebuiltSnapshots (
     import ./make-snapshot.nix {
@@ -200,6 +216,8 @@ let
         ;
       nodes = evaluatedNodes;
       sharedStoreImage = if splitStore then sharedStoreImage else null;
+      tapInterfaces = allTapInterfaces;
+      inherit networkSetupScript;
     }
   );
 
