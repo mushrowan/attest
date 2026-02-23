@@ -858,26 +858,28 @@ defmodule Attest.Machine do
   def handle_call({:reboot, timeout}, _from, state) do
     Logger.info("rebooting #{state.name}")
 
-    with :ok <- state.backend_mod.send_key(state.backend_state, "ctrl-alt-delete") do
-      state = %{state | connected: false}
+    case state.backend_mod.send_key(state.backend_state, "ctrl-alt-delete") do
+      :ok ->
+        state = %{state | connected: false}
 
-      if state.shell do
-        Logger.info("waiting for shell reconnect on #{state.name}")
+        if state.shell do
+          Logger.info("waiting for shell reconnect on #{state.name}")
 
-        case Shell.reconnect(state.shell, timeout) do
-          :ok ->
-            Logger.info("shell reconnected on #{state.name}")
-            {:reply, :ok, %{state | connected: true}}
+          case Shell.reconnect(state.shell, timeout) do
+            :ok ->
+              Logger.info("shell reconnected on #{state.name}")
+              {:reply, :ok, %{state | connected: true}}
 
-          {:error, reason} ->
-            Logger.warning("shell reconnect failed on #{state.name}: #{inspect(reason)}")
-            {:reply, {:error, {:reconnect_failed, reason}}, state}
+            {:error, reason} ->
+              Logger.warning("shell reconnect failed on #{state.name}: #{inspect(reason)}")
+              {:reply, {:error, {:reconnect_failed, reason}}, state}
+          end
+        else
+          {:reply, :ok, state}
         end
-      else
-        {:reply, :ok, state}
-      end
-    else
-      {:error, _} = err -> {:reply, err, state}
+
+      {:error, _} = err ->
+        {:reply, err, state}
     end
   end
 

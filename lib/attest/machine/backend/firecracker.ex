@@ -39,6 +39,7 @@ defmodule Attest.Machine.Backend.Firecracker do
 
   require Logger
 
+  alias Attest.Machine.Backend
   alias Attest.Machine.Backend.Firecracker.API
   alias Attest.Machine.Shell
   alias Attest.Machine.Shell.Transport.Vsock
@@ -169,8 +170,8 @@ defmodule Attest.Machine.Backend.Firecracker do
     File.rm(state.api_socket_path)
   end
 
-  defp stop_shell(pid), do: Attest.Machine.Backend.stop_shell(pid)
-  defp close_port(port), do: Attest.Machine.Backend.close_port(port)
+  defp stop_shell(pid), do: Backend.stop_shell(pid)
+  defp close_port(port), do: Backend.close_port(port)
 
   defp connect_shell(state) do
     :ok = wait_for_file(state.vsock_uds_path, 30_000)
@@ -269,13 +270,11 @@ defmodule Attest.Machine.Backend.Firecracker do
     snapshot_path = Path.join(snapshot_dir, "snapshot_file")
     mem_path = Path.join(snapshot_dir, "mem_file")
 
-    with :ok <- API.patch(api, "/vm", %{"state" => "Paused"}),
-         :ok <-
-           API.put(api, "/snapshot/create", %{
-             "snapshot_path" => snapshot_path,
-             "mem_file_path" => mem_path
-           }) do
-      :ok
+    with :ok <- API.patch(api, "/vm", %{"state" => "Paused"}) do
+      API.put(api, "/snapshot/create", %{
+        "snapshot_path" => snapshot_path,
+        "mem_file_path" => mem_path
+      })
     end
   end
 
@@ -439,11 +438,9 @@ defmodule Attest.Machine.Backend.Firecracker do
     :ok
   end
 
-  defp wait_for_file(path, timeout), do: Attest.Machine.Backend.wait_for_file(path, timeout)
-
-  defp wait_for_file_gone(path, timeout),
-    do: Attest.Machine.Backend.wait_for_file_gone(path, timeout)
+  defp wait_for_file(path, timeout), do: Backend.wait_for_file(path, timeout)
+  defp wait_for_file_gone(path, timeout), do: Backend.wait_for_file_gone(path, timeout)
 
   defp wait_for_process_exit(state, timeout),
-    do: Attest.Machine.Backend.wait_for_process_exit(state.fc_port, state.port_exited, timeout)
+    do: Backend.wait_for_process_exit(state.fc_port, state.port_exited, timeout)
 end

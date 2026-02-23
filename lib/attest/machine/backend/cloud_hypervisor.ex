@@ -33,6 +33,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
 
   require Logger
 
+  alias Attest.Machine.Backend
   # reuse the HTTP/1.1-over-UDS client from firecracker
   alias Attest.Machine.Backend.Firecracker.API
   alias Attest.Machine.Shell
@@ -307,10 +308,10 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
     Map.put(map, "net", net)
   end
 
-  defp stop_shell(pid), do: Attest.Machine.Backend.stop_shell(pid)
-  defp close_port(port), do: Attest.Machine.Backend.close_port(port)
-  defp wait_for_file(path, timeout), do: Attest.Machine.Backend.wait_for_file(path, timeout)
+  defp stop_shell(pid), do: Backend.stop_shell(pid)
+  defp close_port(port), do: Backend.close_port(port)
+  defp wait_for_file(path, timeout), do: Backend.wait_for_file(path, timeout)
 
   defp wait_for_process_exit(state, timeout),
-    do: Attest.Machine.Backend.wait_for_process_exit(state.ch_port, state.port_exited, timeout)
+    do: Backend.wait_for_process_exit(state.ch_port, state.port_exited, timeout)
 end

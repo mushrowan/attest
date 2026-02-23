@@ -122,9 +122,8 @@ defmodule Attest.Machine.OCR do
   end
 
   defp preprocess_and_ocr(screenshot_path, negate) do
-    with {:ok, processed_path} <- preprocess(screenshot_path, negate: negate),
-         {:ok, text} <- run_tesseract(processed_path) do
-      {:ok, text}
+    with {:ok, processed_path} <- preprocess(screenshot_path, negate: negate) do
+      run_tesseract(processed_path)
     end
   end
 end
