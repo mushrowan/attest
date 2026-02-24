@@ -25,7 +25,9 @@ defmodule Attest.Machine do
     booted: false,
     connected: false,
     callbacks: [],
-    console_log: ""
+    console_log: "",
+    console_buffer: "",
+    console_flush_timer: nil
   ]
 
   # client API
@@ -921,13 +923,31 @@ defmodule Attest.Machine do
     {:reply, state.console_log, state}
   end
 
-  # port stdout/stderr data from QEMU backend (port owner is Machine process)
+  # port stdout/stderr data — buffer and log complete lines
   @impl true
   def handle_info({port, {:data, data}}, state) when is_port(port) do
     text = to_string(data)
-    truncated = String.slice(text, 0, 200)
-    Logger.info("QEMU[#{state.name}]: #{truncated}")
-    {:noreply, %{state | console_log: state.console_log <> text}}
+    buffer = state.console_buffer <> text
+
+    {lines, remainder} = split_complete_lines(buffer)
+
+    Enum.each(lines, fn line ->
+      Logger.info("QEMU[#{state.name}]: #{String.slice(line, 0, 200)}")
+    end)
+
+    # schedule a flush for any partial line so it doesn't get stuck
+    state = schedule_console_flush(state, remainder)
+
+    {:noreply, %{state | console_log: state.console_log <> text, console_buffer: remainder}}
+  end
+
+  def handle_info(:flush_console_buffer, %{console_buffer: ""} = state) do
+    {:noreply, %{state | console_flush_timer: nil}}
+  end
+
+  def handle_info(:flush_console_buffer, state) do
+    Logger.info("QEMU[#{state.name}]: #{String.slice(state.console_buffer, 0, 200)}")
+    {:noreply, %{state | console_buffer: "", console_flush_timer: nil}}
   end
 
   # exit_status: update backend state so it knows the process exited
@@ -1014,4 +1034,27 @@ defmodule Attest.Machine do
         {:error, reason}
     end
   end
+
+  # split buffered text into complete lines and a remaining partial line
+  defp split_complete_lines(buffer) do
+    case String.split(buffer, "\n") do
+      [only] -> {[], only}
+      parts -> {Enum.slice(parts, 0..-2//1), List.last(parts)}
+    end
+  end
+
+  # cancel any existing flush timer and schedule a new one
+  defp schedule_console_flush(state, "") do
+    cancel_flush_timer(state.console_flush_timer)
+    %{state | console_flush_timer: nil}
+  end
+
+  defp schedule_console_flush(state, _remainder) do
+    cancel_flush_timer(state.console_flush_timer)
+    timer = Process.send_after(self(), :flush_console_buffer, 100)
+    %{state | console_flush_timer: timer}
+  end
+
+  defp cancel_flush_timer(nil), do: :ok
+  defp cancel_flush_timer(ref), do: Process.cancel_timer(ref)
 end
