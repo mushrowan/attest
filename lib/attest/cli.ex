@@ -169,6 +169,7 @@ defmodule Attest.CLI do
     end
 
     GenServer.stop(driver)
+    Logger.flush()
   end
 
   defp build_from_machine_config(config_path, state_dir, opts) do

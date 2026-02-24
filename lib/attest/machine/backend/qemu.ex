@@ -261,11 +261,28 @@ defmodule Attest.Machine.Backend.QEMU do
   defp wait_for_process_exit(%{qemu_port: nil}, _timeout), do: :ok
   defp wait_for_process_exit(%{port_exited: true}, _timeout), do: :ok
 
-  defp wait_for_process_exit(%{qemu_port: port}, timeout) do
+  defp wait_for_process_exit(%{qemu_port: port, name: name}, timeout) do
     receive do
-      {^port, {:exit_status, _code}} -> :ok
+      {^port, {:exit_status, _code}} ->
+        drain_port_data(port, name)
+        :ok
     after
       timeout -> {:error, :timeout}
+    end
+  end
+
+  defp drain_port_data(port, name) do
+    receive do
+      {^port, {:data, data}} ->
+        text = data |> to_string() |> String.trim()
+
+        if text != "" do
+          Logger.info("QEMU[#{name}]: #{String.slice(text, 0, 200)}")
+        end
+
+        drain_port_data(port, name)
+    after
+      0 -> :ok
     end
   end
 end

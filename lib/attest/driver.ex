@@ -200,13 +200,13 @@ defmodule Attest.Driver do
       safe_stop(pid)
     end
 
+    Logger.info("all machines shut down")
     :ok
   end
 
   defp safe_shutdown(name, pid) do
     try do
       if Attest.Machine.booted?(pid) do
-        Logger.info("shutting down machine #{name}")
         Attest.Machine.shutdown(pid, 30_000)
       end
     catch
