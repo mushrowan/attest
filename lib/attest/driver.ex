@@ -204,7 +204,7 @@ defmodule Attest.Driver do
     :ok
   end
 
-  defp safe_shutdown(name, pid) do
+  defp safe_shutdown(_name, pid) do
     try do
       if Attest.Machine.booted?(pid) do
         Attest.Machine.shutdown(pid, 30_000)
