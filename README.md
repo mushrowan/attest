@@ -48,7 +48,7 @@ nix build .#checks.x86_64-linux.my-test -L
 |---------|-----------|------------|-------------|-----------|
 | QEMU | ~12s | VDE (userspace) | yes (QMP) | no |
 | firecracker | ~5s | TAP + bridge | no | yes (~85ms restore) |
-| cloud-hypervisor | ~4.5s | TAP + bridge | no | no |
+| cloud-hypervisor | ~4.5s | TAP + bridge | no | yes |
 
 ### split store
 

@@ -64,10 +64,11 @@ lib/attest/
 └── machine/
     ├── backend.ex                   # @behaviour (14 callbacks)
     ├── backend/
+    │   ├── api.ex                   # HTTP/1.1 client over UDS (shared)
+    │   ├── micro_vm.ex              # shared microVM macro (vsock, TAP, stubs)
     │   ├── qemu.ex                  # QEMU: Port.open, QMP, shell
-    │   ├── firecracker.ex           # Firecracker: REST API, vsock
-    │   ├── firecracker/
-    │   │   └── api.ex               # HTTP/1.1 client over UDS
+    │   ├── firecracker.ex           # Firecracker: REST API, vsock, snapshots
+    │   ├── cloud_hypervisor.ex      # Cloud Hypervisor: REST API, vsock, snapshots
     │   └── mock.ex                  # unit test mock
     ├── qmp.ex                       # QMP protocol client GenServer
     ├── shell.ex                     # command protocol GenServer
@@ -213,6 +214,4 @@ nix/
 ## future work
 
 - test DSL / syntactic sugar over raw elixir scripts
-- extract shared API module (used by both firecracker and cloud-hypervisor)
-- cloud-hypervisor snapshot support
 - in-guest screenshots via xvfb + imagemagick (non-QEMU backends)
