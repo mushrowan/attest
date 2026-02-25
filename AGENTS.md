@@ -24,11 +24,29 @@ lib/
 ├── attest/
 │   ├── application.ex         # OTP application, supervisors
 │   ├── cli.ex                 # escript CLI
+│   ├── dsl.ex                 # test script DSL (subtest, assertions, retry)
 │   ├── driver.ex              # test coordinator GenServer
 │   ├── machine.ex             # VM GenServer
+│   ├── test_script.ex         # test script evaluator
 │   └── machine/
-│       ├── qmp.ex             # QEMU Machine Protocol client (TODO)
-│       └── shell.ex           # virtconsole shell backdoor (TODO)
+│       ├── backend.ex         # backend behaviour + shared helpers
+│       ├── backend/
+│       │   ├── api.ex         # HTTP/1.1 over UDS (shared)
+│       │   ├── micro_vm.ex    # shared microVM macro
+│       │   ├── qemu.ex        # QEMU backend
+│       │   ├── firecracker.ex # Firecracker backend
+│       │   ├── cloud_hypervisor.ex # Cloud Hypervisor backend
+│       │   └── mock.ex        # test mock backend
+│       ├── guest_screenshot.ex # in-guest screenshot capture
+│       ├── keyboard.ex        # key mapping
+│       ├── ocr.ex             # OCR via tesseract
+│       ├── qmp.ex             # QEMU Machine Protocol client
+│       ├── shell.ex           # command protocol GenServer
+│       └── shell/
+│           ├── transport.ex   # transport behaviour
+│           └── transport/
+│               ├── virtconsole.ex
+│               └── vsock.ex
 ```
 
 ## Code Conventions

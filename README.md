@@ -47,8 +47,8 @@ nix build .#checks.x86_64-linux.my-test -L
 | backend | boot time | networking | screenshots | snapshots |
 |---------|-----------|------------|-------------|-----------|
 | QEMU | ~12s | VDE (userspace) | yes (QMP) | no |
-| firecracker | ~5s | TAP + bridge | no | yes (~85ms restore) |
-| cloud-hypervisor | ~4.5s | TAP + bridge | no | yes |
+| firecracker | ~5s | TAP + bridge | yes (guest) | yes (~85ms restore) |
+| cloud-hypervisor | ~4.5s | TAP + bridge | yes (guest) | yes |
 
 ### split store
 
@@ -140,8 +140,12 @@ Attest.Machine.shutdown(machine)
 snapshot_create(machine, "/tmp/snap")
 snapshot_restore(machine, "/tmp/snap")
 
-# screenshots (QEMU only)
+# screenshots (QEMU — via QMP)
 screenshot(machine, "/tmp/screen.ppm")
+
+# screenshots (firecracker/cloud-hypervisor — via guest shell)
+guest_screenshot(machine, "/tmp/screen.png")                 # fbgrab (default)
+guest_screenshot(machine, "/tmp/screen.png", method: :x11)   # X11
 
 # OCR (QEMU only, needs tesseract)
 Attest.Machine.get_screen_text(machine)

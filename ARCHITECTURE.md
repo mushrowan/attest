@@ -213,4 +213,6 @@ nix/
 
 ## future work
 
-- in-guest screenshots via xvfb + imagemagick (non-QEMU backends)
+- cloud-hypervisor pre-built snapshot support (like FC's usePrebuiltSnapshots)
+- live migration between backends
+- remote VM support (SSH transport instead of vsock/virtconsole)
