@@ -1,7 +1,7 @@
-defmodule Attest.Machine.Backend.Firecracker.APITest do
+defmodule Attest.Machine.Backend.APITest do
   use ExUnit.Case, async: true
 
-  alias Attest.Machine.Backend.Firecracker.API
+  alias Attest.Machine.Backend.API
 
   # helper: mock HTTP server on a UDS
   defp with_mock_api(handler, fun) do

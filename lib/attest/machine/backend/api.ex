@@ -1,9 +1,10 @@
-defmodule Attest.Machine.Backend.Firecracker.API do
+defmodule Attest.Machine.Backend.API do
   @moduledoc """
-  Minimal HTTP/1.1 client for the firecracker REST API over unix domain socket
+  Minimal HTTP/1.1 client over unix domain sockets
 
-  Firecracker exposes its API on an AF_UNIX socket. This module sends
-  JSON requests and parses responses without any external HTTP deps.
+  Both firecracker and cloud-hypervisor expose REST APIs on AF_UNIX
+  sockets. This module sends JSON requests and parses responses
+  without any external HTTP deps.
   """
 
   require Logger

@@ -40,7 +40,7 @@ defmodule Attest.Machine.Backend.Firecracker do
   require Logger
 
   alias Attest.Machine.Backend
-  alias Attest.Machine.Backend.Firecracker.API
+  alias Attest.Machine.Backend.API
   alias Attest.Machine.Shell
   alias Attest.Machine.Shell.Transport.Vsock
 

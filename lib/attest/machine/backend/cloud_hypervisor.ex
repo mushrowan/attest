@@ -34,8 +34,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
   require Logger
 
   alias Attest.Machine.Backend
-  # reuse the HTTP/1.1-over-UDS client from firecracker
-  alias Attest.Machine.Backend.Firecracker.API
+  alias Attest.Machine.Backend.API
   alias Attest.Machine.Shell
   alias Attest.Machine.Shell.Transport.Vsock
 
