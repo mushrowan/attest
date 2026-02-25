@@ -56,6 +56,53 @@ defmodule Attest.TestScriptTest do
 
       GenServer.stop(driver)
     end
+
+    test "auto-imports Attest functions (no prefix needed)", %{id: id} do
+      name = "srv_#{id}"
+
+      {:ok, driver} =
+        Driver.start_link(machines: [%{name: name, backend: Backend.Mock}])
+
+      # start_all, succeed, wait_for_unit etc should work without Attest. prefix
+      result = TestScript.eval_string("start_all.()", driver)
+      assert result == :ok
+
+      GenServer.stop(driver)
+    end
+
+    test "auto-imports DSL functions", %{id: id} do
+      name = "dsl_#{id}"
+
+      {:ok, driver} =
+        Driver.start_link(machines: [%{name: name, backend: Backend.Mock}])
+
+      result =
+        TestScript.eval_string(
+          ~s|assert_contains("hello world", "world")|,
+          driver
+        )
+
+      assert result == :ok
+
+      GenServer.stop(driver)
+    end
+
+    test "subtest macro works in eval'd scripts", %{id: id} do
+      name = "sub_#{id}"
+
+      {:ok, driver} =
+        Driver.start_link(machines: [%{name: name, backend: Backend.Mock}])
+
+      result =
+        TestScript.eval_string(
+          ~s|subtest("boot check", fn -> 42 end)|,
+          driver
+        )
+
+      assert result == 42
+
+      GenServer.stop(driver)
+    end
   end
 
   describe "eval_file/2" do

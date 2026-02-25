@@ -24,7 +24,8 @@ defmodule Attest.TestScript do
   @spec eval_string(String.t(), GenServer.server()) :: term()
   def eval_string(code, driver) do
     bindings = build_bindings(driver)
-    {result, _bindings} = Code.eval_string(code, bindings)
+    wrapped = "import Attest\nimport Attest.DSL\n" <> code
+    {result, _bindings} = Code.eval_string(wrapped, bindings)
     result
   end
 
