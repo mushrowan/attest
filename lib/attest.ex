@@ -353,6 +353,17 @@ defmodule Attest do
   end
 
   @doc """
+  Take an in-guest screenshot (for non-QEMU backends)
+
+  Captures via fbgrab/X11/grim inside the guest and transfers to host.
+  See `Attest.Machine.GuestScreenshot` for required guest packages.
+  """
+  @spec guest_screenshot(GenServer.server(), String.t(), keyword()) :: :ok | {:error, term()}
+  def guest_screenshot(machine, host_path, opts \\ []) do
+    Attest.Machine.GuestScreenshot.capture(machine, host_path, opts)
+  end
+
+  @doc """
   Send raw characters to the kernel serial console.
   """
   @spec send_console(GenServer.server(), String.t()) :: :ok | {:error, term()}
