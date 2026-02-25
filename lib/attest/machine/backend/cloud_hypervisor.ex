@@ -183,15 +183,75 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
     :ok
   end
 
-  # snapshots not yet implemented
+  # snapshots
+
   @impl true
-  def snapshot_create(_state, _snapshot_dir), do: {:error, :unsupported}
+  def snapshot_create(state, snapshot_dir) do
+    api = state.api_socket_path
+    File.mkdir_p!(snapshot_dir)
+
+    with :ok <- API.put_no_body(api, "/api/v1/vm.pause") do
+      API.put(api, "/api/v1/vm.snapshot", %{
+        "destination_url" => "file://#{snapshot_dir}"
+      })
+    end
+  end
 
   @impl true
   def snapshot_load(_state, _snapshot_dir), do: {:error, :unsupported}
 
   @impl true
-  def restore_from_snapshot(_state, _snapshot_dir), do: {:error, :unsupported}
+  def restore_from_snapshot(state, snapshot_dir) do
+    Logger.info("restoring #{state.name} from snapshot in #{snapshot_dir}")
+
+    # tear down existing CH process and shell
+    stop_shell(state.shell)
+    close_port(state.ch_port)
+    File.rm(state.api_socket_path)
+    Backend.wait_for_file_gone(state.vsock_uds_path, 5_000)
+
+    state = spawn_and_restore(state, snapshot_dir)
+    connect_shell(state)
+  end
+
+  defp spawn_and_restore(state, snapshot_dir) do
+    File.rm(state.api_socket_path)
+    File.rm(state.vsock_uds_path)
+
+    cmd = "#{state.cloud_hypervisor_bin} --api-socket #{state.api_socket_path}"
+    port = Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout])
+    state = %{state | ch_port: port, port_exited: false, shell: nil}
+
+    :ok = wait_for_file(state.api_socket_path, 10_000)
+
+    :ok =
+      retry_api(fn ->
+        API.put(state.api_socket_path, "/api/v1/vm.restore", %{
+          "source_url" => "file://#{snapshot_dir}"
+        })
+      end)
+
+    :ok =
+      retry_api(fn ->
+        API.put_no_body(state.api_socket_path, "/api/v1/vm.resume")
+      end)
+
+    state
+  end
+
+  defp retry_api(fun, attempts \\ 20) do
+    case fun.() do
+      :ok ->
+        :ok
+
+      {:error, reason} when reason in [:econnrefused, :closed] and attempts > 0 ->
+        Process.sleep(100)
+        retry_api(fun, attempts - 1)
+
+      other ->
+        other
+    end
+  end
 
   @impl true
   def handle_port_exit(state, _code) do
