@@ -39,10 +39,7 @@ defmodule Attest.Machine.Backend.Firecracker do
 
   require Logger
 
-  alias Attest.Machine.Backend
-  alias Attest.Machine.Backend.API
-  alias Attest.Machine.Shell
-  alias Attest.Machine.Shell.Transport.Vsock
+  use Attest.Machine.Backend.MicroVM
 
   defstruct [
     :name,
@@ -170,27 +167,6 @@ defmodule Attest.Machine.Backend.Firecracker do
     File.rm(state.api_socket_path)
   end
 
-  defp stop_shell(pid), do: Backend.stop_shell(pid)
-  defp close_port(port), do: Backend.close_port(port)
-
-  defp connect_shell(state) do
-    :ok = wait_for_file(state.vsock_uds_path, 30_000)
-
-    Logger.info("connecting shell via vsock for #{state.name}")
-
-    {:ok, shell} =
-      Shell.start_link(
-        socket_path: state.vsock_uds_path,
-        transport: Vsock,
-        transport_config: %{uds_path: state.vsock_uds_path, port: state.vsock_port}
-      )
-
-    :ok = Shell.wait_for_connection(shell, 120_000)
-    state = %{state | shell: shell}
-
-    {:ok, shell, state}
-  end
-
   @impl true
   def shutdown(%{shell: nil} = state, timeout) do
     Logger.warning("shutdown on #{state.name}: no shell, using halt")
@@ -246,20 +222,6 @@ defmodule Attest.Machine.Backend.Firecracker do
     File.rm(state.vsock_uds_path)
     :ok
   end
-
-  # unsupported capabilities — no VGA, QMP, or SLIRP
-
-  @impl true
-  def screenshot(_state, _filename), do: {:error, :unsupported}
-
-  @impl true
-  def send_key(_state, _key), do: {:error, :unsupported}
-
-  @impl true
-  def forward_port(_state, _host_port, _guest_port), do: {:error, :unsupported}
-
-  @impl true
-  def send_console(_state, _chars), do: {:error, :unsupported}
 
   # snapshots
 
@@ -320,37 +282,10 @@ defmodule Attest.Machine.Backend.Firecracker do
     connect_shell(state)
   end
 
-  # network control via host-side ip link commands
-
-  @impl true
-  def block(%{tap_interfaces: []}), do: {:error, :unsupported}
-
-  def block(%{tap_interfaces: taps}) do
-    Enum.each(taps, fn {_id, host_dev, _mac} ->
-      System.cmd("ip", ["link", "set", host_dev, "down"])
-    end)
-
-    :ok
-  end
-
-  @impl true
-  def unblock(%{tap_interfaces: []}), do: {:error, :unsupported}
-
-  def unblock(%{tap_interfaces: taps}) do
-    Enum.each(taps, fn {_id, host_dev, _mac} ->
-      System.cmd("ip", ["link", "set", host_dev, "up"])
-    end)
-
-    :ok
-  end
-
   @impl true
   def handle_port_exit(state, _code) do
     %{state | port_exited: true, fc_port: nil}
   end
-
-  @impl true
-  def capabilities(_state), do: []
 
   # private helpers
 
@@ -438,7 +373,6 @@ defmodule Attest.Machine.Backend.Firecracker do
     :ok
   end
 
-  defp wait_for_file(path, timeout), do: Backend.wait_for_file(path, timeout)
   defp wait_for_file_gone(path, timeout), do: Backend.wait_for_file_gone(path, timeout)
 
   defp wait_for_process_exit(state, timeout),

@@ -33,10 +33,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
 
   require Logger
 
-  alias Attest.Machine.Backend
-  alias Attest.Machine.Backend.API
-  alias Attest.Machine.Shell
-  alias Attest.Machine.Shell.Transport.Vsock
+  use Attest.Machine.Backend.MicroVM
 
   defstruct [
     :name,
@@ -114,23 +111,8 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
     Logger.info("booting cloud-hypervisor VM #{state.name}")
     :ok = API.put_no_body(state.api_socket_path, "/api/v1/vm.boot")
 
-    # wait for vsock UDS
-    :ok = wait_for_file(state.vsock_uds_path, 30_000)
-
     # connect shell via vsock
-    Logger.info("connecting shell via vsock for #{state.name}")
-
-    {:ok, shell} =
-      Shell.start_link(
-        socket_path: state.vsock_uds_path,
-        transport: Vsock,
-        transport_config: %{uds_path: state.vsock_uds_path, port: state.vsock_port}
-      )
-
-    :ok = Shell.wait_for_connection(shell, 120_000)
-    state = %{state | shell: shell}
-
-    {:ok, shell, state}
+    connect_shell(state)
   end
 
   @impl true
@@ -201,42 +183,6 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
     :ok
   end
 
-  # unsupported — no VGA, QMP, or SLIRP
-
-  @impl true
-  def screenshot(_state, _filename), do: {:error, :unsupported}
-
-  @impl true
-  def send_key(_state, _key), do: {:error, :unsupported}
-
-  @impl true
-  def forward_port(_state, _host_port, _guest_port), do: {:error, :unsupported}
-
-  @impl true
-  def send_console(_state, _chars), do: {:error, :unsupported}
-
-  @impl true
-  def block(%{tap_interfaces: []}), do: {:error, :unsupported}
-
-  def block(%{tap_interfaces: taps}) do
-    Enum.each(taps, fn {_id, host_dev, _mac} ->
-      System.cmd("ip", ["link", "set", host_dev, "down"])
-    end)
-
-    :ok
-  end
-
-  @impl true
-  def unblock(%{tap_interfaces: []}), do: {:error, :unsupported}
-
-  def unblock(%{tap_interfaces: taps}) do
-    Enum.each(taps, fn {_id, host_dev, _mac} ->
-      System.cmd("ip", ["link", "set", host_dev, "up"])
-    end)
-
-    :ok
-  end
-
   # snapshots not yet implemented
   @impl true
   def snapshot_create(_state, _snapshot_dir), do: {:error, :unsupported}
@@ -251,9 +197,6 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
   def handle_port_exit(state, _code) do
     %{state | port_exited: true, ch_port: nil}
   end
-
-  @impl true
-  def capabilities(_state), do: []
 
   # public — used by tests and nix integration
 
@@ -306,10 +249,6 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
 
     Map.put(map, "net", net)
   end
-
-  defp stop_shell(pid), do: Backend.stop_shell(pid)
-  defp close_port(port), do: Backend.close_port(port)
-  defp wait_for_file(path, timeout), do: Backend.wait_for_file(path, timeout)
 
   defp wait_for_process_exit(state, timeout),
     do: Backend.wait_for_process_exit(state.ch_port, state.port_exited, timeout)
