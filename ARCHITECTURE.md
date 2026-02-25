@@ -213,5 +213,4 @@ nix/
 
 ## future work
 
-- test DSL / syntactic sugar over raw elixir scripts
 - in-guest screenshots via xvfb + imagemagick (non-QEMU backends)

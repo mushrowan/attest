@@ -118,32 +118,59 @@ machine pid. `start_all` is a function that boots all VMs in parallel.
 
 ### available functions
 
+test scripts auto-import `Attest` and `Attest.DSL`, so no prefix needed:
+
 ```elixir
 # boot
 start_all.()
 
 # shell commands
-Attest.succeed(machine, "command")           # run, raise on non-zero exit
-Attest.fail(machine, "command")              # run, raise on zero exit
-{code, output} = Attest.Machine.execute(machine, "command")
+succeed(machine, "command")           # run, raise on non-zero exit
+fail(machine, "command")              # run, raise on zero exit
+{code, output} = execute(machine, "command")
 
 # wait for state
-Attest.wait_for_unit(machine, "nginx.service")
-Attest.wait_for_open_port(machine, 80)
+wait_for_unit(machine, "nginx.service")
+wait_for_open_port(machine, 80)
 
 # shutdown
 Attest.Machine.shutdown(machine)
 
-# snapshots (firecracker only)
-Attest.snapshot_create(machine, "/tmp/snap")
-Attest.snapshot_restore(machine, "/tmp/snap")
+# snapshots (firecracker, cloud-hypervisor)
+snapshot_create(machine, "/tmp/snap")
+snapshot_restore(machine, "/tmp/snap")
 
 # screenshots (QEMU only)
-Attest.Machine.screenshot(machine, "/tmp/screen.ppm")
+screenshot(machine, "/tmp/screen.ppm")
 
 # OCR (QEMU only, needs tesseract)
 Attest.Machine.get_screen_text(machine)
 Attest.Machine.wait_for_text(machine, "login:", timeout: 30_000)
+```
+
+### DSL helpers
+
+```elixir
+# labelled sections with timing
+subtest "nginx is running", fn ->
+  wait_for_unit(server, "nginx.service")
+  wait_for_open_port(server, 80)
+end
+
+# string assertions
+output = succeed(machine, "hostname")
+assert_contains(output, "server")
+assert_matches(output, ~r/server\d+/)
+
+# retry with backoff
+retry attempts: 10, delay: 1000 do
+  succeed(machine, "curl http://server")
+end
+
+# parallel readiness
+wait_all.([server, client], fn m ->
+  wait_for_unit(m, "multi-user.target")
+end)
 ```
 
 ## benchmarks
