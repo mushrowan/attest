@@ -778,6 +778,7 @@ defmodule Attest.Machine do
   end
 
   def handle_call({:execute, command}, _from, %{shell: shell} = state) do
+    command = dedent(command)
     Logger.debug("executing on #{state.name}: #{command}")
 
     case Shell.execute(shell, command) do
@@ -1057,4 +1058,28 @@ defmodule Attest.Machine do
 
   defp cancel_flush_timer(nil), do: :ok
   defp cancel_flush_timer(ref), do: Process.cancel_timer(ref)
+
+  # strip common leading whitespace from multiline commands
+  # so heredocs and indented scripts work from triple-quoted strings
+  defp dedent(string) do
+    string = String.trim(string, "\n") |> String.trim_trailing()
+
+    lines = String.split(string, "\n")
+
+    min_indent =
+      lines
+      |> Enum.reject(&(String.trim(&1) == ""))
+      |> Enum.map(&(String.length(&1) - String.length(String.trim_leading(&1))))
+      |> Enum.min(fn -> 0 end)
+
+    if min_indent > 0 do
+      lines
+      |> Enum.map(fn line ->
+        if String.trim(line) == "", do: "", else: String.slice(line, min_indent..-1//1)
+      end)
+      |> Enum.join("\n")
+    else
+      string
+    end
+  end
 end
