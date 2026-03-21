@@ -225,8 +225,6 @@ QEMU tests use VDE switches (userspace) and don't need this.
 
 ## future work
 
-- FC async I/O engine (`io_engine: "Async"` for io_uring on block devices, kernel >= 5.10.51)
-- FC block cache type (`cache_type` option for drives, "Unsafe" default vs "Writeback")
 - document cgroups v2 recommendation for snapshot restore performance
 - systemd-nspawn backend (container-based, no KVM needed, ~25% faster than QEMU for simple tests)
 - userfaultfd snapshot restore (external page fault handler for lazy memory loading)

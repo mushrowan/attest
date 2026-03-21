@@ -124,6 +124,31 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
       assert state.pmem_devices == [{"store", "/path/to/store.erofs", true}]
     end
 
+    test "stores cache_type when set" do
+      config = %{
+        name: "cache-wb",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4",
+        cache_type: "Writeback"
+      }
+
+      {:ok, state} = Firecracker.init(config)
+      assert state.cache_type == "Writeback"
+    end
+
+    test "defaults cache_type to Unsafe" do
+      config = %{
+        name: "cache-default",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4"
+      }
+
+      {:ok, state} = Firecracker.init(config)
+      assert state.cache_type == "Unsafe"
+    end
+
     test "stores io_engine when set" do
       config = %{
         name: "io-async",

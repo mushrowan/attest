@@ -34,6 +34,8 @@ defmodule Attest.Machine.Backend.Firecracker do
     ideal for read-only images like the nix store (default: [], requires >= 1.14)
   - `:io_engine` -- I/O engine for block devices, "Sync" (blocking) or "Async"
     (io_uring, default: "Sync", requires host kernel >= 5.10.51)
+  - `:cache_type` -- block device caching strategy, "Unsafe" (fastest, default)
+    or "Writeback" (fsync honoured, safer for data integrity)
   - `:log_level` -- firecracker log level (default: "Warning")
   - `:huge_pages` -- huge page size, "2M" or nil (default: nil)
   - `:entropy` -- enable virtio-rng entropy device (default: false)
@@ -63,6 +65,7 @@ defmodule Attest.Machine.Backend.Firecracker do
     :extra_drives,
     :pmem_devices,
     :io_engine,
+    :cache_type,
     :log_level,
     :huge_pages,
     :entropy,
@@ -101,6 +104,7 @@ defmodule Attest.Machine.Backend.Firecracker do
        extra_drives: Map.get(config, :extra_drives, []),
        pmem_devices: Map.get(config, :pmem_devices, []),
        io_engine: Map.get(config, :io_engine, "Sync"),
+       cache_type: Map.get(config, :cache_type, "Unsafe"),
        log_level: Map.get(config, :log_level, "Warning"),
        huge_pages: Map.get(config, :huge_pages),
        entropy: Map.get(config, :entropy, false),
@@ -344,7 +348,8 @@ defmodule Attest.Machine.Backend.Firecracker do
         "path_on_host" => state.rootfs_path,
         "is_root_device" => true,
         "is_read_only" => false,
-        "io_engine" => state.io_engine
+        "io_engine" => state.io_engine,
+        "cache_type" => state.cache_type
       })
 
     # extra drives
@@ -355,7 +360,8 @@ defmodule Attest.Machine.Backend.Firecracker do
           "path_on_host" => path,
           "is_root_device" => false,
           "is_read_only" => read_only,
-          "io_engine" => state.io_engine
+          "io_engine" => state.io_engine,
+          "cache_type" => state.cache_type
         })
     end)
 
