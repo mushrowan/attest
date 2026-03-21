@@ -129,6 +129,7 @@ defmodule Attest do
   end
 
   @doc false
+  @spec build_journal_cmd(keyword()) :: String.t()
   def build_journal_cmd(opts) do
     parts = ["journalctl", "--no-pager", "-b", to_string(Keyword.get(opts, :boot, 0))]
     parts = if opts[:unit], do: parts ++ ["-u", opts[:unit]], else: parts

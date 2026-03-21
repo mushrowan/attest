@@ -126,6 +126,7 @@ defmodule Attest.VLan do
     {:noreply, state}
   end
 
+  @impl true
   def handle_info({port, {:exit_status, code}}, %{port: port} = state) do
     Logger.warning("vde_switch[#{state.nr}] exited with code #{code}")
     {:noreply, %{state | port: nil}}

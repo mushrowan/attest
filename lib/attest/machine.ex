@@ -782,6 +782,7 @@ defmodule Attest.Machine do
     {:reply, {:error, :not_connected}, state}
   end
 
+  @impl true
   def handle_call({:execute, command}, _from, %{shell: shell} = state) do
     command = dedent(command)
     Logger.debug("executing on #{state.name}: #{command}")
@@ -945,16 +946,19 @@ defmodule Attest.Machine do
     {:noreply, %{state | console_log: state.console_log <> text, console_buffer: remainder}}
   end
 
+  @impl true
   def handle_info(:flush_console_buffer, %{console_buffer: ""} = state) do
     {:noreply, %{state | console_flush_timer: nil}}
   end
 
+  @impl true
   def handle_info(:flush_console_buffer, state) do
     Logger.info("QEMU[#{state.name}]: #{String.slice(state.console_buffer, 0, 200)}")
     {:noreply, %{state | console_buffer: "", console_flush_timer: nil}}
   end
 
   # exit_status: update backend state so it knows the process exited
+  @impl true
   def handle_info({port, {:exit_status, code}}, state) when is_port(port) do
     Logger.warning("process exited with code #{code}")
     backend_state = state.backend_mod.handle_port_exit(state.backend_state, code)

@@ -238,8 +238,7 @@ QEMU tests use VDE switches (userspace) and don't need this.
 ## future work
 
 ### code quality
-- run dialyzer and fix type warnings
-- audit typespec coverage on all public functions
+- run dialyzer and fix type warnings (blocked by nix erlang packaging)
 
 ### advanced
 - userfaultfd snapshot restore (external page fault handler for lazy memory loading)
