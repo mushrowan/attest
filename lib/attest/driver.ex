@@ -3,11 +3,13 @@ defmodule Attest.Driver do
   Main test driver that coordinates VMs and test execution.
 
   The Driver is responsible for:
-  - Loading test configuration
   - Starting/stopping machines via MachineSupervisor
   - Managing VLANs
-  - Executing the test script
   - Handling global timeout
+
+  Test script execution is handled by `Attest.TestScript` from
+  outside the driver to avoid GenServer deadlocks (the script
+  calls back into the driver for machine operations).
   """
   use GenServer
 
@@ -19,7 +21,6 @@ defmodule Attest.Driver do
     :machines,
     :vlans,
     :vlan_pids,
-    :test_script,
     :out_dir,
     :tmp_dir,
     :global_timeout,
@@ -57,14 +58,6 @@ defmodule Attest.Driver do
     GenServer.call(driver, :get_vlans)
   end
 
-  @doc """
-  Run the test script.
-  """
-  @spec run_tests(GenServer.server()) :: :ok
-  def run_tests(driver) do
-    GenServer.call(driver, :run_tests, :infinity)
-  end
-
   # server callbacks
 
   @impl true
@@ -81,7 +74,6 @@ defmodule Attest.Driver do
       vlans: vlan_nrs,
       vlan_pids: vlan_pids,
       tmp_dir: tmp_dir,
-      test_script: Keyword.get(opts, :test_script),
       out_dir: Keyword.get(opts, :out_dir, tmp_dir),
       global_timeout: Keyword.get(opts, :global_timeout, 3_600_000)
     }
@@ -148,16 +140,6 @@ defmodule Attest.Driver do
       pid ->
         {:reply, {:ok, pid}, state}
     end
-  end
-
-  @impl true
-  def handle_call(:run_tests, _from, state) do
-    Logger.info("running test script")
-
-    # TODO: execute test script
-    result = :ok
-
-    {:reply, result, state}
   end
 
   @impl true
