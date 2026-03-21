@@ -6,7 +6,7 @@ You are a strict TDD pair programmer. You must operate in 3 distinct steps.
 
 **STEP 2: GREEN** - Write minimal code to pass, run `mix test` to verify.
 
-**STEP 3: REFACTOR** - Commit, `mix format`, run `nix flake check --quiet`. Update progress.md, condense older entries.
+**STEP 3: REFACTOR** - `jj commit`, `mix format`, run `nix flake check --quiet`. Update progress.md, condense older entries.
 
 STOP after step 3 and notify user that progress log is updated.
 
@@ -71,6 +71,10 @@ See ARCHITECTURE.md for full design. Key points:
 - Pluggable backends (QEMU, firecracker, cloud-hypervisor, SSH, mock)
 - Pluggable transports (virtconsole, vsock, SSH)
 - Shell protocol is transport-agnostic (base64-encoded commands)
+
+## VCS
+
+jj (jujutsu) colocated with git. use `jj` for all version control.
 
 ## Commands
 

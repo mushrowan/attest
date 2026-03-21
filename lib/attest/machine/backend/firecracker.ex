@@ -33,6 +33,8 @@ defmodule Attest.Machine.Backend.Firecracker do
   - `:log_level` -- firecracker log level (default: "Warning")
   - `:huge_pages` -- huge page size, "2M" or nil (default: nil)
   - `:entropy` -- enable virtio-rng entropy device (default: false)
+  - `:enable_pci` -- use virtio-pci transport with MSI-X interrupts instead
+    of MMIO (default: false, requires firecracker >= 1.13)
   """
 
   @behaviour Attest.Machine.Backend
@@ -58,6 +60,7 @@ defmodule Attest.Machine.Backend.Firecracker do
     :log_level,
     :huge_pages,
     :entropy,
+    :enable_pci,
     :snapshot_path,
     :api_socket_path,
     :vsock_uds_path,
@@ -93,6 +96,7 @@ defmodule Attest.Machine.Backend.Firecracker do
        log_level: Map.get(config, :log_level, "Warning"),
        huge_pages: Map.get(config, :huge_pages),
        entropy: Map.get(config, :entropy, false),
+       enable_pci: Map.get(config, :enable_pci, false),
        snapshot_path: Map.get(config, :snapshot_path),
        api_socket_path: Path.join(state_dir, "firecracker.sock"),
        vsock_uds_path: Path.join(state_dir, "v.sock"),
@@ -117,10 +121,8 @@ defmodule Attest.Machine.Backend.Firecracker do
     # spawn firecracker process
     Logger.info("spawning firecracker for #{state.name}")
 
-    cmd = "#{state.firecracker_bin} --api-sock #{state.api_socket_path}"
-
     port =
-      Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout])
+      Port.open({:spawn, fc_cmd(state)}, [:binary, :exit_status, :stderr_to_stdout])
 
     state = %{state | fc_port: port}
 
@@ -151,8 +153,7 @@ defmodule Attest.Machine.Backend.Firecracker do
     File.rm(state.api_socket_path)
     File.rm(state.vsock_uds_path)
 
-    cmd = "#{state.firecracker_bin} --api-sock #{state.api_socket_path}"
-    port = Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout])
+    port = Port.open({:spawn, fc_cmd(state)}, [:binary, :exit_status, :stderr_to_stdout])
     state = %{state | fc_port: port, port_exited: false, shell: nil}
 
     :ok = wait_for_file(state.api_socket_path, 10_000)
@@ -371,6 +372,11 @@ defmodule Attest.Machine.Backend.Firecracker do
     end
 
     :ok
+  end
+
+  defp fc_cmd(state) do
+    cmd = "#{state.firecracker_bin} --api-sock #{state.api_socket_path}"
+    if state.enable_pci, do: cmd <> " --enable-pci", else: cmd
   end
 
   defp wait_for_file_gone(path, timeout), do: Backend.wait_for_file_gone(path, timeout)

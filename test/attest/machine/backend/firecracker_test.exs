@@ -85,6 +85,31 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
       assert {:ok, state} = Firecracker.init(config)
       assert state.snapshot_path == nil
     end
+
+    test "stores enable_pci when set" do
+      config = %{
+        name: "pci-enabled",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4",
+        enable_pci: true
+      }
+
+      assert {:ok, state} = Firecracker.init(config)
+      assert state.enable_pci == true
+    end
+
+    test "defaults enable_pci to false" do
+      config = %{
+        name: "pci-default",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4"
+      }
+
+      assert {:ok, state} = Firecracker.init(config)
+      assert state.enable_pci == false
+    end
   end
 
   describe "capabilities/1" do
