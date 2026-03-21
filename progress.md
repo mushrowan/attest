@@ -2,11 +2,9 @@
 
 ## 2026-03-21
 
-- added SSH backend and transport for remote host management
-- added CH pre-built snapshot support (mirrors firecracker's `snapshot_path`)
-- refactored Transport behaviour with `send/recv` callbacks (Shell no longer calls `:gen_tcp` directly)
-- removed dead `Driver.run_tests/1` (deadlock-prone, unused)
-- fixed stale CH block/unblock docs (already worked via MicroVM macro)
-- dropped live migration from roadmap (not practical)
-- big docs cleanup: README, ARCHITECTURE, AGENTS all synced with current code
-- 271 tests, flake check green
+- FC performance: `enable_pci` (virtio-pci/MSI-X), `pmem_devices` (virtio-pmem), VMClock (auto in v1.15)
+- updated firecracker input from fork to upstream v1.15.0 (vsock fix merged upstream)
+- colocated jj, updated AGENTS.md for jj workflow
+- added SSH backend/transport, CH pre-built snapshots, Transport send/recv refactor
+- removed dead code, fixed stale docs, big docs cleanup
+- 275 tests, flake check green

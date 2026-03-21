@@ -9,7 +9,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     firecracker-src = {
-      url = "github:mushrowan/firecracker/fix/vsock-snapshot-restore-panic";
+      url = "github:firecracker-microvm/firecracker/v1.15.0";
       flake = false;
     };
   };
