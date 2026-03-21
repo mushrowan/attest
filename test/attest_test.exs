@@ -8,6 +8,35 @@ defmodule AttestTest do
   end
 end
 
+defmodule AttestJournalTest do
+  use ExUnit.Case
+
+  # test the command builder directly via Module.__info__
+  # journal/2 is a thin wrapper around execute, so we test the cmd construction
+
+  describe "build_journal_cmd/1" do
+    test "default args" do
+      cmd = Attest.build_journal_cmd([])
+      assert cmd == "journalctl --no-pager -b 0"
+    end
+
+    test "with unit filter" do
+      cmd = Attest.build_journal_cmd(unit: "nginx.service")
+      assert cmd == "journalctl --no-pager -b 0 -u nginx.service"
+    end
+
+    test "with line limit" do
+      cmd = Attest.build_journal_cmd(lines: 50)
+      assert cmd == "journalctl --no-pager -b 0 -n 50"
+    end
+
+    test "with all options" do
+      cmd = Attest.build_journal_cmd(unit: "headscale.service", lines: 100, boot: -1)
+      assert cmd == "journalctl --no-pager -b -1 -u headscale.service -n 100"
+    end
+  end
+end
+
 defmodule AttestWaitAllTest do
   use ExUnit.Case
 

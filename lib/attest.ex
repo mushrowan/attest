@@ -106,6 +106,37 @@ defmodule Attest do
   end
 
   @doc """
+  Fetch journal logs from the VM.
+
+  Returns the journalctl output as a string. Useful for debugging
+  boot hangs or service failures.
+
+  ## Options
+
+  - `:unit` -- filter by systemd unit (e.g. "headscale.service")
+  - `:lines` -- number of lines to return (default: all)
+  - `:boot` -- boot index, 0 for current (default: 0)
+  """
+  @spec journal(GenServer.server(), keyword()) :: {:ok, String.t()} | {:error, term()}
+  def journal(machine, opts \\ []) do
+    cmd = build_journal_cmd(opts)
+
+    case Machine.execute(machine, cmd) do
+      {:ok, output, 0} -> {:ok, output}
+      {:ok, output, _} -> {:ok, output}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc false
+  def build_journal_cmd(opts) do
+    parts = ["journalctl", "--no-pager", "-b", to_string(Keyword.get(opts, :boot, 0))]
+    parts = if opts[:unit], do: parts ++ ["-u", opts[:unit]], else: parts
+    parts = if opts[:lines], do: parts ++ ["-n", to_string(opts[:lines])], else: parts
+    Enum.join(parts, " ")
+  end
+
+  @doc """
   Take a screenshot of the VM display.
   """
   @spec screenshot(GenServer.server(), String.t()) :: :ok | {:error, term()}
