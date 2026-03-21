@@ -12,6 +12,7 @@ defmodule Attest.CLI do
   alias Attest.{Driver, MachineConfig, StartCommand, TestScript}
 
   @type parsed_args :: %{
+          subcommand: nil | {:eval, String.t()} | {:eval_file, String.t()},
           start_scripts: [String.t()],
           machine_config: String.t() | nil,
           vlans: [non_neg_integer()],
@@ -159,8 +160,7 @@ defmodule Attest.CLI do
     end
 
     if opts.interactive do
-      Logger.info("starting interactive shell")
-      IEx.start()
+      start_interactive_shell()
     end
 
     GenServer.stop(driver)
@@ -251,6 +251,17 @@ defmodule Attest.CLI do
     case System.get_env(name) do
       nil -> default
       val -> String.to_integer(val)
+    end
+  end
+
+  # use Code.eval_string to avoid compile-time reference to IEx
+  defp start_interactive_shell do
+    Logger.info("starting interactive shell")
+
+    if Code.ensure_loaded?(IEx) do
+      Code.eval_string("IEx.start()")
+    else
+      Logger.error("IEx not available (run with iex -S mix or iex -S attest)")
     end
   end
 end

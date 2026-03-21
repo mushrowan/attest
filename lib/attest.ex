@@ -122,9 +122,8 @@ defmodule Attest do
     cmd = build_journal_cmd(opts)
 
     case Machine.execute(machine, cmd) do
-      {:ok, output, 0} -> {:ok, output}
-      {:ok, output, _} -> {:ok, output}
       {:error, reason} -> {:error, reason}
+      {_exit_code, output} -> {:ok, output}
     end
   end
 

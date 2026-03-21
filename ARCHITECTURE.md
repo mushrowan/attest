@@ -238,7 +238,7 @@ QEMU tests use VDE switches (userspace) and don't need this.
 ## future work
 
 ### code quality
-- run dialyzer and fix type warnings (blocked by nix erlang packaging)
+- (all clear -- dialyzer, credo strict, typespecs all passing)
 
 ### advanced
 - userfaultfd snapshot restore (external page fault handler for lazy memory loading)
