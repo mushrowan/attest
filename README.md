@@ -211,10 +211,66 @@ fc-snapshot:      cold=5354  restore=80
 - upgrades to v43+ automatically get VIRTIO_RING_F_INDIRECT_DESC and VIRTIO_BLK_F_SEG_MAX for better block throughput
 - v51+ adds transparent huge pages for shared memory and DISCARD/WRITE_ZEROES for thin provisioning
 
+## debugging
+
+### verbose boot output
+
+add `debug_boot: true` to your machine config (or pass it in the nix test) to
+get full systemd debug output on the console:
+
+```nix
+nodes = {
+  server = { ... }: {
+    # attest config
+  };
+};
+# in the nix make-test.nix call:
+debugBoot = true;
+```
+
+when `wait_for_unit` or `wait_for_open_port` times out, attest automatically
+logs failed systemd units and the last 30 journal lines.
+
+### fetching logs from a running VM
+
+```elixir
+# in your test script
+{:ok, logs} = Attest.journal(server)
+{:ok, logs} = Attest.journal(server, unit: "headscale.service", lines: 50)
+IO.puts(logs)
+```
+
+### interactive debugging
+
+to poke around a hanging VM, change your test script to pause indefinitely:
+
+```elixir
+start_all.()
+IO.puts("VMs started, drop into IEx to debug")
+Process.sleep(:infinity)
+```
+
+then run with `--interactive`. from the IEx shell:
+
+```elixir
+# check what's stuck
+{:ok, pid} = Attest.Driver.get_machine(driver, "server")
+Attest.Machine.execute(pid, "systemctl list-jobs")
+Attest.Machine.execute(pid, "journalctl -b --no-pager")
+```
+
+### common boot hang causes
+
+- **`systemd-networkd-wait-online.service`** -- waiting for a network interface
+  that doesn't exist in the VM. disable with
+  `systemd.services.systemd-networkd-wait-online.enable = false`
+- **DNS resolution** -- services blocking on DNS when no nameserver is reachable
+- **missing kernel modules** -- check `dmesg` for errors
+
 ## development
 
 ```bash
-mix test                    # unit tests (296 tests)
+mix test                    # unit tests (304 tests)
 mix format                  # format
 nix flake check --quiet     # full check: build, format, tests, integration
 iex -S mix                  # repl

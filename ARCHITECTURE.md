@@ -237,12 +237,6 @@ QEMU tests use VDE switches (userspace) and don't need this.
 
 ## future work
 
-### ease of use
-- `debug_boot` config option (auto-adds systemd.log_level=debug to kernel args)
-- `Machine.journal/2` helper to fetch journalctl output from a VM
-- better timeout diagnostics (show last console output when wait_for_unit times out)
-- interactive debugging guide in README (how to shell into a hanging VM)
-
 ### code quality
 - run dialyzer and fix type warnings
 - audit typespec coverage on all public functions
