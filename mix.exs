@@ -29,7 +29,7 @@ defmodule Attest.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
+      extra_applications: [:logger, :ssh, :public_key],
       mod: {Attest.Application, []}
     ]
   end
