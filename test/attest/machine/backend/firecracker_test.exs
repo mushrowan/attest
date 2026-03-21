@@ -2,6 +2,7 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
   use ExUnit.Case
 
   alias Attest.Machine.Backend.Firecracker
+  alias Attest.Machine.Shell
 
   describe "init/1" do
     test "stores config and derives socket paths" do
@@ -446,7 +447,7 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
 
       # verify shell works after restore
       assert {:ok, "restored-ok", 0} =
-               Attest.Machine.Shell.execute(shell_pid, "echo test")
+               Shell.execute(shell_pid, "echo test")
 
       # cleanup
       send(mock_server, :stop)

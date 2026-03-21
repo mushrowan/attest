@@ -2,6 +2,7 @@ defmodule Attest.Machine.Backend.CloudHypervisorTest do
   use ExUnit.Case
 
   alias Attest.Machine.Backend.CloudHypervisor
+  alias Attest.Machine.Shell
 
   describe "init/1" do
     test "stores config and derives socket paths" do
@@ -301,7 +302,7 @@ defmodule Attest.Machine.Backend.CloudHypervisorTest do
       assert resume_data =~ "PUT /api/v1/vm.resume"
 
       assert {:ok, "restored-ok", 0} =
-               Attest.Machine.Shell.execute(shell_pid, "echo test")
+               Shell.execute(shell_pid, "echo test")
 
       send(mock_server, :stop)
       if Process.alive?(shell_pid), do: GenServer.stop(shell_pid)
@@ -420,7 +421,7 @@ defmodule Attest.Machine.Backend.CloudHypervisorTest do
 
       # shell works
       assert {:ok, "prebuilt-ok", 0} =
-               Attest.Machine.Shell.execute(shell_pid, "echo test")
+               Shell.execute(shell_pid, "echo test")
 
       send(mock_server, :stop)
       if Process.alive?(shell_pid), do: GenServer.stop(shell_pid)

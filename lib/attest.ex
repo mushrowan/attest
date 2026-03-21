@@ -26,6 +26,7 @@ defmodule Attest do
 
   alias Attest.Driver
   alias Attest.Machine
+  alias Attest.Machine.GuestScreenshot
 
   @doc """
   Start all machines in the test.
@@ -360,7 +361,7 @@ defmodule Attest do
   """
   @spec guest_screenshot(GenServer.server(), String.t(), keyword()) :: :ok | {:error, term()}
   def guest_screenshot(machine, host_path, opts \\ []) do
-    Attest.Machine.GuestScreenshot.capture(machine, host_path, opts)
+    GuestScreenshot.capture(machine, host_path, opts)
   end
 
   @doc """

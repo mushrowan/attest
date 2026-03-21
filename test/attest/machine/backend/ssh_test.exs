@@ -8,7 +8,7 @@ defmodule Attest.Machine.Backend.SSHTest do
     tmp = Path.join(System.tmp_dir!(), "ssh-backend-#{:rand.uniform(100_000)}")
     File.mkdir_p!(tmp)
 
-    key = :public_key.generate_key({:rsa, 2048, 65537})
+    key = :public_key.generate_key({:rsa, 2048, 65_537})
     entry = :public_key.pem_entry_encode(:RSAPrivateKey, key)
     pem = :public_key.pem_encode([entry])
     File.write!(Path.join(tmp, "ssh_host_rsa_key"), pem)

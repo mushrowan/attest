@@ -102,16 +102,14 @@ defmodule Attest.DSL do
   defp do_retry(0, _delay, _fun, last_error), do: raise(last_error)
 
   defp do_retry(remaining, delay, fun, _last_error) do
-    try do
-      fun.()
-    rescue
-      e ->
-        if remaining > 1 do
-          Process.sleep(delay)
-          do_retry(remaining - 1, delay, fun, e)
-        else
-          reraise e, __STACKTRACE__
-        end
-    end
+    fun.()
+  rescue
+    e ->
+      if remaining > 1 do
+        Process.sleep(delay)
+        do_retry(remaining - 1, delay, fun, e)
+      else
+        reraise e, __STACKTRACE__
+      end
   end
 end

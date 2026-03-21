@@ -636,19 +636,24 @@ defmodule Attest.Machine do
     if System.monotonic_time(:millisecond) >= deadline do
       {:error, :timeout}
     else
-      case get_screen_text_variants(machine) do
-        {:ok, variants} ->
-          if Enum.any?(variants, &Regex.match?(regex, &1)) do
-            :ok
-          else
-            Process.sleep(1_000)
-            do_wait_for_text(machine, regex, deadline)
-          end
+      case screen_text_matches?(machine, regex) do
+        :ok ->
+          :ok
 
-        {:error, _reason} ->
+        :retry ->
           Process.sleep(1_000)
           do_wait_for_text(machine, regex, deadline)
       end
+    end
+  end
+
+  defp screen_text_matches?(machine, regex) do
+    case get_screen_text_variants(machine) do
+      {:ok, variants} ->
+        if Enum.any?(variants, &Regex.match?(regex, &1)), do: :ok, else: :retry
+
+      {:error, _} ->
+        :retry
     end
   end
 
@@ -862,22 +867,8 @@ defmodule Attest.Machine do
     case state.backend_mod.send_key(state.backend_state, "ctrl-alt-delete") do
       :ok ->
         state = %{state | connected: false}
-
-        if state.shell do
-          Logger.info("waiting for shell reconnect on #{state.name}")
-
-          case Shell.reconnect(state.shell, timeout) do
-            :ok ->
-              Logger.info("shell reconnected on #{state.name}")
-              {:reply, :ok, %{state | connected: true}}
-
-            {:error, reason} ->
-              Logger.warning("shell reconnect failed on #{state.name}: #{inspect(reason)}")
-              {:reply, {:error, {:reconnect_failed, reason}}, state}
-          end
-        else
-          {:reply, :ok, state}
-        end
+        {result, state} = reconnect_shell(state, timeout)
+        {:reply, result, state}
 
       {:error, _} = err ->
         {:reply, err, state}
@@ -964,6 +955,26 @@ defmodule Attest.Machine do
   end
 
   # private helpers
+
+  defp reconnect_shell(%{shell: nil} = state, _timeout), do: {:ok, state}
+
+  defp reconnect_shell(state, timeout) do
+    Logger.info("waiting for shell reconnect on #{state.name}")
+
+    case Shell.reconnect(state.shell, timeout) do
+      :ok ->
+        Logger.info("shell reconnected on #{state.name}")
+        {:ok, %{state | connected: true}}
+
+      {:error, reason} ->
+        Logger.warning("shell reconnect failed on #{state.name}: #{inspect(reason)}")
+        {{:error, {:reconnect_failed, reason}}, state}
+    end
+  end
+
+  defp strip_indent(line, n) do
+    if String.trim(line) == "", do: "", else: String.slice(line, n..-1//1)
+  end
 
   # guest-side polling: single shell command with 100ms intervals
   # eliminates per-poll shell round-trip overhead
@@ -1056,11 +1067,7 @@ defmodule Attest.Machine do
       |> Enum.min(fn -> 0 end)
 
     if min_indent > 0 do
-      lines
-      |> Enum.map(fn line ->
-        if String.trim(line) == "", do: "", else: String.slice(line, min_indent..-1//1)
-      end)
-      |> Enum.join("\n")
+      Enum.map_join(lines, "\n", &strip_indent(&1, min_indent))
     else
       string
     end

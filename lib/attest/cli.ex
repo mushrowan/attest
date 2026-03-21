@@ -33,57 +33,52 @@ defmodule Attest.CLI do
   @spec parse_args([String.t()]) :: parsed_args()
   def parse_args(args) do
     {subcommand, args} = extract_subcommand(args)
+    {opts, rest, _invalid} = parse_opts(args)
+    resolve_config(subcommand, opts, rest)
+  end
 
-    {opts, rest, _invalid} =
-      OptionParser.parse(args,
-        strict: [
-          help: :boolean,
-          interactive: :boolean,
-          keep_vm_state: :boolean,
-          global_timeout: :integer,
-          start_scripts: :string,
-          machine_config: :string,
-          vlans: :string,
-          test_script: :string,
-          output_dir: :string
-        ],
-        aliases: [
-          h: :help,
-          i: :interactive,
-          k: :keep_vm_state,
-          K: :keep_vm_state,
-          t: :global_timeout,
-          o: :output_dir
-        ]
-      )
+  defp parse_opts(args) do
+    OptionParser.parse(args,
+      strict: [
+        help: :boolean,
+        interactive: :boolean,
+        keep_vm_state: :boolean,
+        global_timeout: :integer,
+        start_scripts: :string,
+        machine_config: :string,
+        vlans: :string,
+        test_script: :string,
+        output_dir: :string
+      ],
+      aliases: [
+        h: :help,
+        i: :interactive,
+        k: :keep_vm_state,
+        K: :keep_vm_state,
+        t: :global_timeout,
+        o: :output_dir
+      ]
+    )
+  end
 
-    # env var fallbacks (set by nix wrapProgram)
-    machine_config =
-      opts[:machine_config] || System.get_env("machineConfig")
-
-    start_scripts_str =
-      opts[:start_scripts] || System.get_env("startScripts", "")
-
-    vlans_str =
-      opts[:vlans] || System.get_env("vlans", "")
-
-    test_script =
-      opts[:test_script] || List.first(rest) || System.get_env("testScript")
-
-    timeout_seconds = opts[:global_timeout] || env_int("globalTimeout", 3600)
-
+  # merge CLI flags with env var fallbacks (set by nix wrapProgram)
+  defp resolve_config(subcommand, opts, rest) do
     %{
       subcommand: subcommand,
-      machine_config: machine_config,
-      start_scripts: parse_space_separated(start_scripts_str),
-      vlans: parse_vlan_list(vlans_str),
-      test_script: test_script,
-      global_timeout: timeout_seconds * 1000,
+      machine_config: opt_or_env(opts, :machine_config, "machineConfig"),
+      start_scripts: parse_space_separated(opt_or_env(opts, :start_scripts, "startScripts", "")),
+      vlans: parse_vlan_list(opt_or_env(opts, :vlans, "vlans", "")),
+      test_script: opts[:test_script] || List.first(rest) || System.get_env("testScript"),
+      global_timeout: (opts[:global_timeout] || env_int("globalTimeout", 3600)) * 1000,
       keep_vm_state: opts[:keep_vm_state] || false,
       interactive: opts[:interactive] || false,
       output_dir: opts[:output_dir],
       help: opts[:help] || false
     }
+  end
+
+  defp opt_or_env(opts, key, env_name, default \\ nil) do
+    opts[key] || System.get_env(env_name, default)
   end
 
   @spec main([String.t()]) :: :ok

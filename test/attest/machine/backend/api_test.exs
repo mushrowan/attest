@@ -56,29 +56,32 @@ defmodule Attest.Machine.Backend.APITest do
         acc = acc <> data
 
         if String.contains?(acc, "\r\n\r\n") do
-          # check for content-length to read body
-          case Regex.run(~r/Content-Length: (\d+)/i, acc) do
-            [_, length_str] ->
-              content_length = String.to_integer(length_str)
-              [headers, body_start] = String.split(acc, "\r\n\r\n", parts: 2)
-              remaining = content_length - byte_size(body_start)
-
-              if remaining > 0 do
-                {:ok, rest} = :gen_tcp.recv(socket, remaining, 5000)
-                {:ok, headers <> "\r\n\r\n" <> body_start <> rest}
-              else
-                {:ok, acc}
-              end
-
-            nil ->
-              {:ok, acc}
-          end
+          read_body(socket, acc)
         else
           recv_http_request(socket, acc)
         end
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp read_body(socket, acc) do
+    case Regex.run(~r/Content-Length: (\d+)/i, acc) do
+      [_, length_str] ->
+        content_length = String.to_integer(length_str)
+        [headers, body_start] = String.split(acc, "\r\n\r\n", parts: 2)
+        remaining = content_length - byte_size(body_start)
+
+        if remaining > 0 do
+          {:ok, rest} = :gen_tcp.recv(socket, remaining, 5000)
+          {:ok, headers <> "\r\n\r\n" <> body_start <> rest}
+        else
+          {:ok, acc}
+        end
+
+      nil ->
+        {:ok, acc}
     end
   end
 
