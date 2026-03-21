@@ -213,5 +213,4 @@ nix/
 
 ## future work
 
-- live migration between backends
 - remote VM support (SSH transport instead of vsock/virtconsole)
