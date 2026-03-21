@@ -50,9 +50,12 @@ nix build .#checks.x86_64-linux.my-test -L
 | firecracker | ~5s | TAP + bridge | yes (guest) | yes (~85ms restore) |
 | cloud-hypervisor | ~4.5s | TAP + bridge | yes (guest) | yes (pre-built or runtime) |
 | SSH | n/a | existing | no | no |
+| nspawn | ~1s | veth/host | no | no |
 
 the SSH backend connects to already-running hosts (cloud VMs, physical machines,
-containers with sshd) rather than managing a hypervisor.
+containers with sshd) rather than managing a hypervisor. the nspawn backend
+runs NixOS in a systemd-nspawn container -- no KVM needed, works in CI and
+cheap VMs without nested virtualisation.
 
 ### split store
 
@@ -211,7 +214,7 @@ fc-snapshot:      cold=5354  restore=80
 ## development
 
 ```bash
-mix test                    # unit tests (279 tests)
+mix test                    # unit tests (296 tests)
 mix format                  # format
 nix flake check --quiet     # full check: build, format, tests, integration
 iex -S mix                  # repl

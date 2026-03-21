@@ -40,6 +40,7 @@ lib/
 │       │   ├── firecracker.ex # Firecracker backend
 │       │   ├── cloud_hypervisor.ex # Cloud Hypervisor backend
 │       │   ├── ssh.ex         # SSH backend (remote hosts)
+│       │   ├── nspawn.ex      # nspawn backend (containers)
 │       │   └── mock.ex        # test mock backend
 │       ├── guest_screenshot.ex # in-guest screenshot capture
 │       ├── keyboard.ex        # key mapping

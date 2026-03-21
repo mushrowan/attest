@@ -46,6 +46,7 @@ Machine GenServer (public API)
     ├── Backend.Firecracker     -- REST API, vsock shell, TAP networking
     ├── Backend.CloudHypervisor -- REST API, vsock shell, TAP networking
     ├── Backend.SSH             -- SSH shell, no hypervisor
+    ├── Backend.Nspawn          -- systemd-nspawn container, no KVM
     └── Backend.Mock            -- injected pids for unit tests
 
 Shell GenServer (command protocol)
@@ -79,6 +80,7 @@ lib/
         │   ├── firecracker.ex       # firecracker: REST API, vsock, snapshots
         │   ├── cloud_hypervisor.ex  # cloud-hypervisor: REST API, vsock, snapshots
         │   ├── ssh.ex               # SSH: remote host, no hypervisor
+        │   ├── nspawn.ex            # systemd-nspawn: container, no KVM
         │   └── mock.ex              # unit test mock
         ├── guest_screenshot.ex      # in-guest screenshot capture (fbgrab/X11)
         ├── keyboard.ex              # key name mapping
@@ -153,6 +155,16 @@ connects to already-running hosts over SSH. no hypervisor management:
 - all optional capabilities unsupported (no VGA, snapshots, etc.)
 - useful for cloud VMs, physical machines, or containers with sshd
 
+### Backend.Nspawn
+
+boots a NixOS system in a systemd-nspawn container. no KVM needed:
+- start spawns nspawn with bind-mounted state dir, connects shell
+  via VirtConsole transport (unix socket at /run/attest/shell.sock)
+- shutdown sends `poweroff` over the shell
+- halt calls `machinectl terminate`
+- all optional capabilities unsupported (no VGA, snapshots, etc.)
+- useful for CI, cheap VMs, and environments without nested virt
+
 ### Backend.Mock
 
 wraps injected QMP and Shell pids for unit testing. all lifecycle
@@ -225,7 +237,6 @@ QEMU tests use VDE switches (userspace) and don't need this.
 
 ## future work
 
-- systemd-nspawn backend (container-based, no KVM needed, ~25% faster than QEMU for simple tests)
 - userfaultfd snapshot restore (external page fault handler for lazy memory loading)
 - reflink/CoW rootfs copies in nix integration (near-instant vs full copy)
 
