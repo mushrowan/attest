@@ -1,9 +1,12 @@
 # progress
 
+## 2026-03-21
+
+- added SSH backend (`Backend.SSH`) for managing remote hosts. connects over SSH, runs commands via shell protocol. no hypervisor. 271 tests, flake check green.
+- fixed SSH transport in nix sandbox (always provide `user_dir` to avoid `~/.ssh` access).
+- fixed stale CH moduledoc (block/unblock already works via MicroVM macro), added tests.
+
 ## 2026-03-20
 
-- added SSH transport (`Transport.SSH`) for remote VM support. bridge GenServer owns SSH channel, buffers `{:ssh_cm, ...}` messages for synchronous send/recv. tested against local Erlang SSH daemon. 251 tests, flake check green.
-- refactored Transport behaviour: added `send/recv` callbacks, Shell now uses transport-agnostic send/recv instead of `:gen_tcp` directly. renamed `Shell.socket` to `Shell.conn`.
-- added pre-built snapshot support to cloud-hypervisor backend (`snapshot_path` config).
-- removed dead `Driver.run_tests/1` and `:test_script` field.
-- dropped live migration from future work (snapshot formats are hypervisor-specific).
+- added SSH transport, refactored Transport behaviour with send/recv callbacks.
+- added CH pre-built snapshot support. removed dead `Driver.run_tests`. dropped live migration.

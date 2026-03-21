@@ -45,6 +45,7 @@ Machine GenServer (public API)
     ├── Backend.QEMU            — Port.open, QMP, virtconsole shell
     ├── Backend.Firecracker     — REST API, vsock shell, TAP networking
     ├── Backend.CloudHypervisor — REST API, vsock shell, TAP networking
+    ├── Backend.SSH             — SSH shell, no hypervisor
     └── Backend.Mock            — injected pids for unit tests
 
 Shell GenServer (command protocol)
@@ -70,6 +71,7 @@ lib/attest/
     │   ├── qemu.ex                  # QEMU: Port.open, QMP, shell
     │   ├── firecracker.ex           # Firecracker: REST API, vsock, snapshots
     │   ├── cloud_hypervisor.ex      # Cloud Hypervisor: REST API, vsock, snapshots
+    │   ├── ssh.ex                   # SSH: remote host, no hypervisor
     │   └── mock.ex                  # unit test mock
     ├── qmp.ex                       # QMP protocol client GenServer
     ├── shell.ex                     # command protocol GenServer
@@ -131,6 +133,15 @@ manages firecracker microVM lifecycle:
 - no VGA/QMP/SLIRP: screenshot, send_key, forward_port unsupported
 
 uses `Firecracker.API` for HTTP/1.1 over UDS (hand-rolled, no deps).
+
+### Backend.SSH
+
+connects to already-running hosts over SSH. no hypervisor management:
+- start opens SSH connection via Transport.SSH, returns shell pid
+- shutdown sends `poweroff` over the shell, then cleans up
+- halt just closes the SSH connection
+- all optional capabilities unsupported (no VGA, snapshots, etc.)
+- useful for cloud VMs, physical machines, or containers with sshd
 
 ### Backend.Mock
 
@@ -223,4 +234,4 @@ nix/
 
 ## future work
 
-- SSH-based backend (full lifecycle over SSH, not just shell transport)
+(none currently planned)
