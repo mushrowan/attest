@@ -47,6 +47,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
     :vsock_cid,
     :vsock_port,
     :state_dir,
+    :snapshot_path,
     :api_socket_path,
     :vsock_uds_path,
     :extra_disks,
@@ -79,12 +80,17 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
        extra_disks: Map.get(config, :extra_disks, []),
        tap_interfaces: Map.get(config, :tap_interfaces, []),
        state_dir: state_dir,
+       snapshot_path: Map.get(config, :snapshot_path),
        api_socket_path: Path.join(state_dir, "cloud-hypervisor.sock"),
        vsock_uds_path: Path.join(state_dir, "v.sock")
      }}
   end
 
   @impl true
+  def start(%{snapshot_path: snap} = state) when is_binary(snap) do
+    start_from_snapshot(state)
+  end
+
   def start(state) do
     File.mkdir_p!(state.state_dir)
     File.rm(state.api_socket_path)
@@ -112,6 +118,15 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
     :ok = API.put_no_body(state.api_socket_path, "/api/v1/vm.boot")
 
     # connect shell via vsock
+    connect_shell(state)
+  end
+
+  defp start_from_snapshot(state) do
+    File.mkdir_p!(state.state_dir)
+
+    Logger.info("restoring #{state.name} from pre-built snapshot #{state.snapshot_path}")
+
+    state = spawn_and_restore(state, state.snapshot_path)
     connect_shell(state)
   end
 

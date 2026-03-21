@@ -27,6 +27,26 @@ defmodule Attest.Machine.Backend.CloudHypervisorTest do
       assert state.vsock_cid == 3
       assert state.vsock_port == 1234
     end
+
+    test "stores snapshot_path when set" do
+      config = %{
+        name: "snap-init",
+        cloud_hypervisor_bin: "/usr/bin/cloud-hypervisor",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.raw",
+        state_dir: "/tmp/ch-snap-init",
+        snapshot_path: "/nix/store/snap/machine"
+      }
+
+      {:ok, state} = CloudHypervisor.init(config)
+      assert state.snapshot_path == "/nix/store/snap/machine"
+    end
+
+    test "defaults snapshot_path to nil" do
+      config = %{name: "snap-default", state_dir: "/tmp/ch-snap-default"}
+      {:ok, state} = CloudHypervisor.init(config)
+      assert state.snapshot_path == nil
+    end
   end
 
   describe "capabilities/1" do
@@ -267,6 +287,125 @@ defmodule Attest.Machine.Backend.CloudHypervisorTest do
       assert resume_data =~ "PUT /api/v1/vm.resume"
 
       assert {:ok, "restored-ok", 0} =
+               Attest.Machine.Shell.execute(shell_pid, "echo test")
+
+      send(mock_server, :stop)
+      if Process.alive?(shell_pid), do: GenServer.stop(shell_pid)
+
+      if new_state.ch_port do
+        try do
+          Port.close(new_state.ch_port)
+        rescue
+          _ -> :ok
+        end
+
+        receive do
+          {_, {:exit_status, _}} -> :ok
+        after
+          1000 -> :ok
+        end
+      end
+
+      File.rm_rf!(state_dir)
+    end
+  end
+
+  describe "start/1 with pre-built snapshot" do
+    @tag timeout: 15_000
+    test "restores from snapshot_path instead of cold booting" do
+      state_dir = Path.join(System.tmp_dir!(), "ch-prebuilt-#{:rand.uniform(100_000)}")
+      snap_dir = Path.join(state_dir, "prebuilt-snapshot")
+      File.mkdir_p!(snap_dir)
+
+      api_socket = Path.join(state_dir, "cloud-hypervisor.sock")
+      vsock_uds = Path.join(state_dir, "v.sock")
+      File.rm(api_socket)
+      File.rm(vsock_uds)
+
+      test_pid = self()
+
+      mock_bin = Path.join(state_dir, "mock-ch")
+
+      File.write!(mock_bin, """
+      #!/bin/sh
+      trap 'exit 0' TERM
+      while true; do sleep 0.1; done
+      """)
+
+      File.chmod!(mock_bin, 0o755)
+
+      config = %{
+        name: "prebuilt-test",
+        cloud_hypervisor_bin: mock_bin,
+        kernel_image_path: "/dev/null",
+        rootfs_path: "/dev/null",
+        state_dir: state_dir,
+        vsock_port: 1234,
+        snapshot_path: snap_dir
+      }
+
+      {:ok, state} = CloudHypervisor.init(config)
+
+      # mock API + vsock server
+      mock_server =
+        spawn(fn ->
+          Process.sleep(200)
+
+          {:ok, api_listen} =
+            :gen_tcp.listen(0, [:binary, {:active, false}, {:ip, {:local, api_socket}}])
+
+          # PUT /api/v1/vm.restore
+          {:ok, conn1} = :gen_tcp.accept(api_listen, 10_000)
+          {:ok, data1} = recv_all(conn1)
+          send(test_pid, {:prebuilt_api, :restore, data1})
+          :gen_tcp.send(conn1, "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
+          :gen_tcp.close(conn1)
+
+          # PUT /api/v1/vm.resume
+          {:ok, conn2} = :gen_tcp.accept(api_listen, 10_000)
+          {:ok, data2} = recv_all(conn2)
+          send(test_pid, {:prebuilt_api, :resume, data2})
+          :gen_tcp.send(conn2, "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
+          :gen_tcp.close(conn2)
+
+          # vsock shell
+          {:ok, vsock_listen} =
+            :gen_tcp.listen(0, [:binary, {:active, false}, {:ip, {:local, vsock_uds}}])
+
+          {:ok, vsock_conn} = :gen_tcp.accept(vsock_listen, 10_000)
+          {:ok, _connect} = :gen_tcp.recv(vsock_conn, 0, 5_000)
+          :gen_tcp.send(vsock_conn, "OK 1234\n")
+          :gen_tcp.send(vsock_conn, "Spawning backdoor root shell...\n")
+          :inet.setopts(vsock_conn, [{:packet, :line}])
+          {:ok, _cmd} = :gen_tcp.recv(vsock_conn, 0, 30_000)
+          :gen_tcp.send(vsock_conn, Base.encode64("prebuilt-ok") <> "\n")
+          {:ok, _} = :gen_tcp.recv(vsock_conn, 0, 30_000)
+          :gen_tcp.send(vsock_conn, "0\n")
+
+          receive do
+            :stop -> :ok
+          after
+            30_000 -> :ok
+          end
+        end)
+
+      # start should use snapshot path, not cold boot
+      assert {:ok, shell_pid, new_state} = CloudHypervisor.start(state)
+
+      assert is_pid(shell_pid)
+      assert new_state.shell == shell_pid
+      assert new_state.ch_port != nil
+
+      # should have called vm.restore, not vm.create + vm.boot
+      assert_receive {:prebuilt_api, :restore, restore_data}, 5000
+      assert restore_data =~ "PUT /api/v1/vm.restore"
+      assert restore_data =~ "file://#{snap_dir}"
+
+      assert_receive {:prebuilt_api, :resume, resume_data}, 5000
+      assert resume_data =~ "PUT /api/v1/vm.resume"
+
+      # shell works
+      assert {:ok, "prebuilt-ok", 0} =
                Attest.Machine.Shell.execute(shell_pid, "echo test")
 
       send(mock_server, :stop)
