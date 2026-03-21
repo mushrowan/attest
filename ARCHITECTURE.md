@@ -225,7 +225,6 @@ QEMU tests use VDE switches (userspace) and don't need this.
 
 ## future work
 
-- document cgroups v2 recommendation for snapshot restore performance
 - systemd-nspawn backend (container-based, no KVM needed, ~25% faster than QEMU for simple tests)
 - userfaultfd snapshot restore (external page fault handler for lazy memory loading)
 - reflink/CoW rootfs copies in nix integration (near-instant vs full copy)

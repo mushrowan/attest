@@ -192,10 +192,26 @@ cloud-hypervisor: boot=4411  exec=8    total=4447ms
 fc-snapshot:      cold=5354  restore=80
 ```
 
+## performance tips
+
+### firecracker
+
+- **`enable_pci: true`** -- virtio-pci with MSI-X interrupts instead of MMIO. better I/O throughput (>= 1.13)
+- **`io_engine: "Async"`** -- io_uring for block I/O instead of blocking syscalls (host kernel >= 5.10.51)
+- **`pmem_devices`** -- use virtio-pmem for read-only images like the nix store. bypasses the block layer entirely (>= 1.14)
+- **snapshots** -- pre-built snapshot restore is ~6x faster than cold boot (25ms mmap vs full kernel boot)
+- **cgroups v2** -- firecracker snapshot restore has high latency on cgroups v1. NixOS defaults to v2 but verify with `stat -fc %T /sys/fs/cgroup` (should show `cgroup2fs`)
+- **huge pages** -- `huge_pages: "2M"` reduces TLB misses for memory-intensive guests
+
+### cloud-hypervisor
+
+- upgrades to v43+ automatically get VIRTIO_RING_F_INDIRECT_DESC and VIRTIO_BLK_F_SEG_MAX for better block throughput
+- v51+ adds transparent huge pages for shared memory and DISCARD/WRITE_ZEROES for thin provisioning
+
 ## development
 
 ```bash
-mix test                    # unit tests (271 tests)
+mix test                    # unit tests (279 tests)
 mix format                  # format
 nix flake check --quiet     # full check: build, format, tests, integration
 iex -S mix                  # repl
