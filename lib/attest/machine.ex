@@ -790,16 +790,14 @@ defmodule Attest.Machine do
   @impl true
   def handle_call({:wait_for_unit, unit, timeout}, _from, %{shell: shell} = state) do
     Logger.info("waiting for unit #{unit} on #{state.name}")
-    retries = max(div(timeout, 1000), 1)
-    result = poll_unit_state(shell, unit, retries)
+    result = wait_unit_guest(shell, unit, timeout)
     {:reply, result, state}
   end
 
   @impl true
   def handle_call({:wait_for_open_port, port, timeout}, _from, %{shell: shell} = state) do
     Logger.info("waiting for port #{port} on #{state.name}")
-    retries = max(div(timeout, 1000), 1)
-    result = poll_port_open(shell, port, retries)
+    result = wait_port_guest(shell, port, timeout)
     {:reply, result, state}
   end
 
@@ -967,54 +965,39 @@ defmodule Attest.Machine do
 
   # private helpers
 
-  defp poll_unit_state(shell, unit, retries) do
-    cmd = "systemctl show #{unit} --property=ActiveState"
+  # guest-side polling: single shell command with 100ms intervals
+  # eliminates per-poll shell round-trip overhead
 
-    case Shell.execute(shell, cmd) do
-      {:ok, output, _exit_code} ->
-        case parse_unit_state(output) do
-          "active" ->
-            :ok
+  defp wait_unit_guest(shell, unit, timeout_ms) do
+    timeout_s = max(div(timeout_ms, 1000), 1)
 
-          "failed" ->
-            {:error, {:unit_failed, unit}}
+    cmd =
+      "timeout #{timeout_s} sh -c " <>
+        "'while true; do " <>
+        "s=$(systemctl show #{unit} --property=ActiveState --value 2>/dev/null); " <>
+        "case \"$s\" in active) exit 0;; failed) exit 1;; esac; " <>
+        "sleep 0.1; " <>
+        "done'"
 
-          _other when retries > 0 ->
-            Process.sleep(1000)
-            poll_unit_state(shell, unit, retries - 1)
-
-          other ->
-            {:error, {:unit_timeout, unit, other}}
-        end
-
-      {:error, reason} ->
-        {:error, {:shell_error, reason}}
+    case Shell.execute(shell, cmd, timeout_ms + 5000) do
+      {:ok, _output, 0} -> :ok
+      {:ok, _output, 1} -> {:error, {:unit_failed, unit}}
+      {:ok, _output, _} -> {:error, {:unit_timeout, unit}}
+      {:error, reason} -> {:error, {:shell_error, reason}}
     end
   end
 
-  defp parse_unit_state(output) do
-    case Regex.run(~r/ActiveState=(\w+)/, output) do
-      [_, state] -> state
-      _ -> "unknown"
-    end
-  end
+  defp wait_port_guest(shell, port, timeout_ms) do
+    timeout_s = max(div(timeout_ms, 1000), 1)
 
-  defp poll_port_open(shell, port, retries) do
-    cmd = "nc -z localhost #{port}"
+    cmd =
+      "timeout #{timeout_s} sh -c " <>
+        "'while ! nc -z localhost #{port} 2>/dev/null; do sleep 0.1; done'"
 
-    case Shell.execute(shell, cmd) do
-      {:ok, _output, 0} ->
-        :ok
-
-      {:ok, _output, _nonzero} when retries > 0 ->
-        Process.sleep(1000)
-        poll_port_open(shell, port, retries - 1)
-
-      {:ok, _output, _nonzero} ->
-        {:error, {:port_not_open, port}}
-
-      {:error, reason} ->
-        {:error, {:shell_error, reason}}
+    case Shell.execute(shell, cmd, timeout_ms + 5000) do
+      {:ok, _output, 0} -> :ok
+      {:ok, _output, _} -> {:error, {:port_not_open, port}}
+      {:error, reason} -> {:error, {:shell_error, reason}}
     end
   end
 

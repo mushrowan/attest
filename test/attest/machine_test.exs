@@ -755,7 +755,8 @@ defmodule Attest.MachineTest do
   end
 
   describe "wait_for_unit/3" do
-    test "polls until unit is active" do
+    # guest-side polling: single shell command, exit 0=active, 1=failed, 124=timeout
+    test "returns ok when unit is active" do
       socket_path = Path.join(System.tmp_dir!(), "shell-wait-#{:rand.uniform(10000)}.sock")
       {:ok, shell} = Shell.start_link(socket_path: socket_path)
 
@@ -769,15 +770,9 @@ defmodule Attest.MachineTest do
 
         :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
 
-        # first poll - activating
+        # single command -- guest-side poll returns active (exit 0)
         {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
-        :ok = :gen_tcp.send(sock, Base.encode64("ActiveState=activating\n") <> "\n")
-        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
-        :ok = :gen_tcp.send(sock, "0\n")
-
-        # second poll - active
-        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
-        :ok = :gen_tcp.send(sock, Base.encode64("ActiveState=active\n") <> "\n")
+        :ok = :gen_tcp.send(sock, Base.encode64("") <> "\n")
         {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
         :ok = :gen_tcp.send(sock, "0\n")
 
@@ -810,10 +805,11 @@ defmodule Attest.MachineTest do
 
         :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
 
+        # single command -- guest-side poll returns failed (exit 1)
         {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
-        :ok = :gen_tcp.send(sock, Base.encode64("ActiveState=failed\n") <> "\n")
+        :ok = :gen_tcp.send(sock, Base.encode64("") <> "\n")
         {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
-        :ok = :gen_tcp.send(sock, "0\n")
+        :ok = :gen_tcp.send(sock, "1\n")
       end)
 
       :ok = Shell.wait_for_connection(shell, 5000)
@@ -826,13 +822,12 @@ defmodule Attest.MachineTest do
       assert {:error, {:unit_failed, "bad.service"}} =
                Machine.wait_for_unit(machine, "bad.service", 5000)
 
-      # machine should still be alive
       assert Process.alive?(machine)
       GenServer.stop(machine)
       File.rm(socket_path)
     end
 
-    test "returns error when unit stays activating past retries" do
+    test "returns error on timeout" do
       socket_path =
         Path.join(System.tmp_dir!(), "shell-unit-timeout-#{:rand.uniform(10000)}.sock")
 
@@ -850,13 +845,11 @@ defmodule Attest.MachineTest do
 
         :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
 
-        # always return activating for 3 retries
-        for _i <- 1..3 do
-          {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
-          :ok = :gen_tcp.send(sock, Base.encode64("ActiveState=activating\n") <> "\n")
-          {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
-          :ok = :gen_tcp.send(sock, "0\n")
-        end
+        # single command -- guest-side poll timed out (exit 124)
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "124\n")
       end)
 
       :ok = Shell.wait_for_connection(shell, 5000)
@@ -866,7 +859,7 @@ defmodule Attest.MachineTest do
 
       :ok = Machine.start(machine)
 
-      assert {:error, {:unit_timeout, "slow.service", "activating"}} =
+      assert {:error, {:unit_timeout, "slow.service"}} =
                Machine.wait_for_unit(machine, "slow.service", 2000)
 
       assert Process.alive?(machine)
@@ -876,7 +869,7 @@ defmodule Attest.MachineTest do
   end
 
   describe "wait_for_open_port/3" do
-    test "polls until port is open" do
+    test "returns ok when port is open" do
       socket_path = Path.join(System.tmp_dir!(), "shell-port-#{:rand.uniform(10000)}.sock")
       {:ok, shell} = Shell.start_link(socket_path: socket_path)
 
@@ -890,13 +883,7 @@ defmodule Attest.MachineTest do
 
         :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
 
-        # first poll - port closed (non-zero exit)
-        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
-        :ok = :gen_tcp.send(sock, Base.encode64("") <> "\n")
-        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
-        :ok = :gen_tcp.send(sock, "1\n")
-
-        # second poll - port open (zero exit)
+        # single command -- guest-side poll returns port open (exit 0)
         {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
         :ok = :gen_tcp.send(sock, Base.encode64("") <> "\n")
         {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
@@ -935,13 +922,11 @@ defmodule Attest.MachineTest do
 
         :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
 
-        # always return non-zero (port closed) for 3 retries
-        for _i <- 1..3 do
-          {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
-          :ok = :gen_tcp.send(sock, Base.encode64("") <> "\n")
-          {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
-          :ok = :gen_tcp.send(sock, "1\n")
-        end
+        # single command -- guest-side poll timed out (exit 124)
+        {:ok, _cmd} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, Base.encode64("") <> "\n")
+        {:ok, _} = :gen_tcp.recv(sock, 0, 5000)
+        :ok = :gen_tcp.send(sock, "124\n")
       end)
 
       :ok = Shell.wait_for_connection(shell, 5000)
