@@ -50,7 +50,8 @@ Machine GenServer (public API)
 Shell GenServer (command protocol)
 └── delegates connection to Transport behaviour
     ├── Transport.VirtConsole — listen/accept on unix socket
-    └── Transport.Vsock       — firecracker vsock CONNECT protocol
+    ├── Transport.Vsock       — firecracker vsock CONNECT protocol
+    └── Transport.SSH         — SSH channel via bridge GenServer
 ```
 
 ## file structure
@@ -73,10 +74,11 @@ lib/attest/
     ├── qmp.ex                       # QMP protocol client GenServer
     ├── shell.ex                     # command protocol GenServer
     └── shell/
-        ├── transport.ex             # @behaviour
+        ├── transport.ex             # @behaviour (connect, send, recv, close)
         └── transport/
             ├── virtconsole.ex       # unix socket listen/accept
-            └── vsock.ex             # firecracker vsock CONNECT
+            ├── vsock.ex             # firecracker vsock CONNECT
+            └── ssh.ex               # SSH channel + bridge GenServer
 ```
 
 ## module details
@@ -139,7 +141,8 @@ operations are no-ops. screenshot delegates to QMP if available.
 
 transport-agnostic command protocol. delegates connection to a
 Transport implementation, then sends/receives using the base64
-protocol:
+protocol. the Transport behaviour defines `connect/send/recv/close`
+so Shell never calls `:gen_tcp` directly:
 
 1. send: `bash -c '<command>' | (base64 -w 0; echo)\n`
 2. recv: `<base64 output>\n`
@@ -157,6 +160,13 @@ and cloud-hypervisor backends.
 connects to firecracker's vsock UDS, sends `CONNECT <port>\n`,
 reads `OK <port>\n`, then waits for the shell backdoor ready message.
 the resulting socket is in line mode, ready for the shell protocol.
+
+### Transport.SSH
+
+connects to a remote host over SSH (Erlang `:ssh` module), opens a
+session channel, and requests a shell. a Bridge GenServer owns the
+channel and provides synchronous send/recv by buffering `{:ssh_cm, ...}`
+messages. supports password and key-based auth.
 
 ### QMP (GenServer)
 
@@ -213,4 +223,5 @@ nix/
 
 ## future work
 
-- remote VM support (SSH transport instead of vsock/virtconsole)
+- SSH-based backend (full lifecycle over SSH, not just shell transport)
+- network block/unblock for cloud-hypervisor TAP interfaces

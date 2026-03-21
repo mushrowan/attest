@@ -46,7 +46,8 @@ lib/
 │           ├── transport.ex   # transport behaviour
 │           └── transport/
 │               ├── virtconsole.ex
-│               └── vsock.ex
+│               ├── vsock.ex
+│               └── ssh.ex     # SSH channel + bridge GenServer
 ```
 
 ## Code Conventions

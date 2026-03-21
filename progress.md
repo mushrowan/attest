@@ -2,5 +2,8 @@
 
 ## 2026-03-20
 
-- added pre-built snapshot support to cloud-hypervisor backend. when `snapshot_path` is set in config, `start/1` restores from snapshot (vm.restore + vm.resume) instead of cold booting (vm.create + vm.boot). mirrors firecracker's existing pattern. 245 tests, flake check green.
-- removed dead `Driver.run_tests/1` and `:test_script` field (deadlock-prone no-op).
+- added SSH transport (`Transport.SSH`) for remote VM support. bridge GenServer owns SSH channel, buffers `{:ssh_cm, ...}` messages for synchronous send/recv. tested against local Erlang SSH daemon. 251 tests, flake check green.
+- refactored Transport behaviour: added `send/recv` callbacks, Shell now uses transport-agnostic send/recv instead of `:gen_tcp` directly. renamed `Shell.socket` to `Shell.conn`.
+- added pre-built snapshot support to cloud-hypervisor backend (`snapshot_path` config).
+- removed dead `Driver.run_tests/1` and `:test_script` field.
+- dropped live migration from future work (snapshot formats are hypervisor-specific).
