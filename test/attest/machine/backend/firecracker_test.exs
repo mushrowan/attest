@@ -124,6 +124,31 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
       assert state.pmem_devices == [{"store", "/path/to/store.erofs", true}]
     end
 
+    test "stores io_engine when set" do
+      config = %{
+        name: "io-async",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4",
+        io_engine: "Async"
+      }
+
+      {:ok, state} = Firecracker.init(config)
+      assert state.io_engine == "Async"
+    end
+
+    test "defaults io_engine to Sync" do
+      config = %{
+        name: "io-default",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4"
+      }
+
+      {:ok, state} = Firecracker.init(config)
+      assert state.io_engine == "Sync"
+    end
+
     test "defaults pmem_devices to empty list" do
       config = %{
         name: "pmem-default",

@@ -32,6 +32,8 @@ defmodule Attest.Machine.Backend.Firecracker do
   - `:extra_drives` -- list of {drive_id, path, is_read_only} (default: [])
   - `:pmem_devices` -- list of {id, path, read_only} for virtio-pmem devices,
     ideal for read-only images like the nix store (default: [], requires >= 1.14)
+  - `:io_engine` -- I/O engine for block devices, "Sync" (blocking) or "Async"
+    (io_uring, default: "Sync", requires host kernel >= 5.10.51)
   - `:log_level` -- firecracker log level (default: "Warning")
   - `:huge_pages` -- huge page size, "2M" or nil (default: nil)
   - `:entropy` -- enable virtio-rng entropy device (default: false)
@@ -60,6 +62,7 @@ defmodule Attest.Machine.Backend.Firecracker do
     :tap_interfaces,
     :extra_drives,
     :pmem_devices,
+    :io_engine,
     :log_level,
     :huge_pages,
     :entropy,
@@ -97,6 +100,7 @@ defmodule Attest.Machine.Backend.Firecracker do
        tap_interfaces: Map.get(config, :tap_interfaces, []),
        extra_drives: Map.get(config, :extra_drives, []),
        pmem_devices: Map.get(config, :pmem_devices, []),
+       io_engine: Map.get(config, :io_engine, "Sync"),
        log_level: Map.get(config, :log_level, "Warning"),
        huge_pages: Map.get(config, :huge_pages),
        entropy: Map.get(config, :entropy, false),
@@ -339,7 +343,8 @@ defmodule Attest.Machine.Backend.Firecracker do
         "drive_id" => "rootfs",
         "path_on_host" => state.rootfs_path,
         "is_root_device" => true,
-        "is_read_only" => false
+        "is_read_only" => false,
+        "io_engine" => state.io_engine
       })
 
     # extra drives
@@ -349,7 +354,8 @@ defmodule Attest.Machine.Backend.Firecracker do
           "drive_id" => drive_id,
           "path_on_host" => path,
           "is_root_device" => false,
-          "is_read_only" => read_only
+          "is_read_only" => read_only,
+          "io_engine" => state.io_engine
         })
     end)
 
