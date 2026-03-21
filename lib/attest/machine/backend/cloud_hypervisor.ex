@@ -9,7 +9,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
   ## Capabilities
 
   No VGA, screenshots, or keyboard simulation. Network block/unblock
-  not yet implemented.
+  is available via host-side `ip link` when TAP interfaces are configured.
 
   ## Config
 

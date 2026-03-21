@@ -83,6 +83,20 @@ defmodule Attest.Machine.Backend.CloudHypervisorTest do
     end
   end
 
+  describe "block/unblock" do
+    test "block without tap interfaces returns unsupported" do
+      config = %{name: "block-test", state_dir: "/tmp/ch-block", tap_interfaces: []}
+      {:ok, state} = CloudHypervisor.init(config)
+      assert {:error, :unsupported} = CloudHypervisor.block(state)
+    end
+
+    test "unblock without tap interfaces returns unsupported" do
+      config = %{name: "unblock-test", state_dir: "/tmp/ch-unblock", tap_interfaces: []}
+      {:ok, state} = CloudHypervisor.init(config)
+      assert {:error, :unsupported} = CloudHypervisor.unblock(state)
+    end
+  end
+
   describe "handle_port_exit/2" do
     test "marks port as exited" do
       {:ok, state} = CloudHypervisor.init(%{name: "exit", state_dir: "/tmp/ch-exit"})

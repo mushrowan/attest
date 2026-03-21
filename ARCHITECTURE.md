@@ -224,4 +224,3 @@ nix/
 ## future work
 
 - SSH-based backend (full lifecycle over SSH, not just shell transport)
-- network block/unblock for cloud-hypervisor TAP interfaces
