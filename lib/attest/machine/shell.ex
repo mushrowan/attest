@@ -19,7 +19,7 @@ defmodule Attest.Machine.Shell do
 
   alias Attest.Machine.Shell.Transport.VirtConsole
 
-  defstruct [:socket_path, :transport, :transport_config, :socket, connected: false]
+  defstruct [:socket_path, :transport, :transport_config, :conn, connected: false]
 
   # Client API
 
@@ -86,8 +86,8 @@ defmodule Attest.Machine.Shell do
         %{connected: false} = state
       ) do
     case state.transport.connect(state.transport_config, timeout) do
-      {:ok, socket} ->
-        {:reply, :ok, %{state | socket: socket, connected: true}}
+      {:ok, conn} ->
+        {:reply, :ok, %{state | conn: conn, connected: true}}
 
       {:error, reason} ->
         {:reply, {:error, reason}, state}
@@ -100,30 +100,29 @@ defmodule Attest.Machine.Shell do
 
   @impl true
   def handle_call({:reconnect, timeout}, _from, state) do
-    # close old socket if present
-    if state.socket do
-      state.transport.close(state.socket)
+    if state.conn do
+      state.transport.close(state.conn)
     end
 
     case state.transport.connect(state.transport_config, timeout) do
-      {:ok, socket} ->
-        {:reply, :ok, %{state | socket: socket, connected: true}}
+      {:ok, conn} ->
+        {:reply, :ok, %{state | conn: conn, connected: true}}
 
       {:error, reason} ->
-        {:reply, {:error, reason}, %{state | socket: nil, connected: false}}
+        {:reply, {:error, reason}, %{state | conn: nil, connected: false}}
     end
   end
 
   @impl true
-  def handle_call({:execute, command}, _from, %{socket: socket, connected: true} = state) do
-    result = do_execute(socket, command)
+  def handle_call({:execute, command}, _from, %{conn: conn, connected: true} = state) do
+    result = do_execute(state.transport, conn, command)
     {:reply, result, state}
   end
 
   @impl true
   def terminate(_reason, state) do
-    if state.socket do
-      state.transport.close(state.socket)
+    if state.conn do
+      state.transport.close(state.conn)
     end
 
     :ok
@@ -131,19 +130,19 @@ defmodule Attest.Machine.Shell do
 
   # Private helpers
 
-  defp do_execute(socket, command) do
-    with :ok <- :gen_tcp.send(socket, format_command(command)),
-         {:ok, output_line} <- recv_line(socket, 900_000),
-         :ok <- :gen_tcp.send(socket, "echo ${PIPESTATUS[0]}\n"),
-         {:ok, exit_code_line} <- recv_line(socket, 5000) do
+  defp do_execute(transport, conn, command) do
+    with :ok <- transport.send(conn, format_command(command)),
+         {:ok, output_line} <- recv_line(transport, conn, 900_000),
+         :ok <- transport.send(conn, "echo ${PIPESTATUS[0]}\n"),
+         {:ok, exit_code_line} <- recv_line(transport, conn, 5000) do
       parse_output(output_line, exit_code_line)
     end
   end
 
-  # read from socket until we get a complete line (ending with \n)
-  # TCP is a stream protocol so large outputs may arrive in chunks
-  defp recv_line(socket, timeout, acc \\ "") do
-    case :gen_tcp.recv(socket, 0, timeout) do
+  # read from transport until we get a complete line (ending with \n)
+  # data may arrive in chunks across multiple recv calls
+  defp recv_line(transport, conn, timeout, acc \\ "") do
+    case transport.recv(conn, timeout) do
       {:ok, data} ->
         buf = acc <> data
 
@@ -151,7 +150,7 @@ defmodule Attest.Machine.Shell do
           [line | _rest] = String.split(buf, "\n", parts: 2)
           {:ok, line}
         else
-          recv_line(socket, timeout, buf)
+          recv_line(transport, conn, timeout, buf)
         end
 
       {:error, reason} ->

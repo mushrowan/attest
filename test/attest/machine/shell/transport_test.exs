@@ -10,6 +10,8 @@ defmodule Attest.Machine.Shell.TransportTest do
       callbacks = Transport.behaviour_info(:callbacks)
       assert {:connect, 2} in callbacks
       assert {:close, 1} in callbacks
+      assert {:send, 2} in callbacks
+      assert {:recv, 2} in callbacks
     end
   end
 end

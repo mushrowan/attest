@@ -35,6 +35,12 @@ defmodule Attest.Machine.Shell.Transport.VirtConsole do
   end
 
   @impl true
+  def send(socket, data), do: :gen_tcp.send(socket, data)
+
+  @impl true
+  def recv(socket, timeout), do: :gen_tcp.recv(socket, 0, timeout)
+
+  @impl true
   def close(socket) do
     :gen_tcp.close(socket)
     :ok
