@@ -795,15 +795,29 @@ defmodule Attest.Machine do
   @impl true
   def handle_call({:wait_for_unit, unit, timeout}, _from, %{shell: shell} = state) do
     Logger.info("waiting for unit #{unit} on #{state.name}")
-    result = wait_unit_guest(shell, unit, timeout)
-    {:reply, result, state}
+
+    case wait_unit_guest(shell, unit, timeout) do
+      :ok ->
+        {:reply, :ok, state}
+
+      {:error, _} = err ->
+        log_boot_diagnostics(shell, state.name)
+        {:reply, err, state}
+    end
   end
 
   @impl true
   def handle_call({:wait_for_open_port, port, timeout}, _from, %{shell: shell} = state) do
     Logger.info("waiting for port #{port} on #{state.name}")
-    result = wait_port_guest(shell, port, timeout)
-    {:reply, result, state}
+
+    case wait_port_guest(shell, port, timeout) do
+      :ok ->
+        {:reply, :ok, state}
+
+      {:error, _} = err ->
+        log_boot_diagnostics(shell, state.name)
+        {:reply, err, state}
+    end
   end
 
   @impl true
@@ -970,6 +984,30 @@ defmodule Attest.Machine do
         Logger.warning("shell reconnect failed on #{state.name}: #{inspect(reason)}")
         {{:error, {:reconnect_failed, reason}}, state}
     end
+  end
+
+  defp log_boot_diagnostics(shell, name) do
+    # fetch failed/stuck units
+    case Shell.execute(shell, "systemctl --failed --no-pager --no-legend 2>/dev/null", 5000) do
+      {:ok, output, _} when output != "" ->
+        Logger.error("#{name} failed units:\n#{output}")
+
+      _ ->
+        :ok
+    end
+
+    # fetch last journal lines
+    case Shell.execute(shell, "journalctl -b 0 -n 30 --no-pager 2>/dev/null", 5000) do
+      {:ok, output, _} when output != "" ->
+        Logger.error("#{name} last journal lines:\n#{output}")
+
+      _ ->
+        :ok
+    end
+  rescue
+    _ -> :ok
+  catch
+    _, _ -> :ok
   end
 
   defp strip_indent(line, n) do
