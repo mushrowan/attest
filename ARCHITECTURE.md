@@ -225,7 +225,6 @@ QEMU tests use VDE switches (userspace) and don't need this.
 
 ## future work
 
-- FC PCI mode (`--enable-pci` for virtio-pci transport, MSI-X interrupts)
 - FC virtio-pmem for nix store image (bypass block layer for read-only store)
 - FC VMClock device (snapshot-safe clocks, fixes time drift after restore)
 

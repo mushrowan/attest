@@ -30,6 +30,8 @@ defmodule Attest.Machine.Backend.Firecracker do
   - `:vsock_port` -- guest port for shell backdoor (default: 1234)
   - `:tap_interfaces` -- list of {iface_id, host_dev_name, guest_mac} (default: [])
   - `:extra_drives` -- list of {drive_id, path, is_read_only} (default: [])
+  - `:pmem_devices` -- list of {id, path, read_only} for virtio-pmem devices,
+    ideal for read-only images like the nix store (default: [], requires >= 1.14)
   - `:log_level` -- firecracker log level (default: "Warning")
   - `:huge_pages` -- huge page size, "2M" or nil (default: nil)
   - `:entropy` -- enable virtio-rng entropy device (default: false)
@@ -57,6 +59,7 @@ defmodule Attest.Machine.Backend.Firecracker do
     :state_dir,
     :tap_interfaces,
     :extra_drives,
+    :pmem_devices,
     :log_level,
     :huge_pages,
     :entropy,
@@ -93,6 +96,7 @@ defmodule Attest.Machine.Backend.Firecracker do
        state_dir: state_dir,
        tap_interfaces: Map.get(config, :tap_interfaces, []),
        extra_drives: Map.get(config, :extra_drives, []),
+       pmem_devices: Map.get(config, :pmem_devices, []),
        log_level: Map.get(config, :log_level, "Warning"),
        huge_pages: Map.get(config, :huge_pages),
        entropy: Map.get(config, :entropy, false),
@@ -363,6 +367,16 @@ defmodule Attest.Machine.Backend.Firecracker do
           "iface_id" => iface_id,
           "host_dev_name" => host_dev,
           "guest_mac" => guest_mac
+        })
+    end)
+
+    # pmem devices (virtio-pmem, e.g. for read-only nix store)
+    Enum.each(state.pmem_devices, fn {id, path, read_only} ->
+      :ok =
+        API.put(api, "/pmem/#{id}", %{
+          "id" => id,
+          "path_on_host" => path,
+          "read_only" => read_only
         })
     end)
 

@@ -110,6 +110,31 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
       assert {:ok, state} = Firecracker.init(config)
       assert state.enable_pci == false
     end
+
+    test "stores pmem_devices when set" do
+      config = %{
+        name: "pmem-set",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4",
+        pmem_devices: [{"store", "/path/to/store.erofs", true}]
+      }
+
+      {:ok, state} = Firecracker.init(config)
+      assert state.pmem_devices == [{"store", "/path/to/store.erofs", true}]
+    end
+
+    test "defaults pmem_devices to empty list" do
+      config = %{
+        name: "pmem-default",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4"
+      }
+
+      {:ok, state} = Firecracker.init(config)
+      assert state.pmem_devices == []
+    end
   end
 
   describe "capabilities/1" do
