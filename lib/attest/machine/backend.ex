@@ -21,7 +21,7 @@ defmodule Attest.Machine.Backend do
   @callback wait_for_shutdown(state, timeout()) :: :ok | {:error, :timeout}
   @callback cleanup(state) :: :ok
 
-  # optional capabilities — return {:error, :unsupported} if not available
+  # optional capabilities -- return {:error, :unsupported} if not available
   @callback screenshot(state, filename :: String.t()) :: :ok | {:error, term()}
   @callback send_key(state, key :: String.t()) :: :ok | {:error, term()}
   @callback block(state) :: :ok | {:error, term()}
@@ -30,7 +30,7 @@ defmodule Attest.Machine.Backend do
               :ok | {:error, term()}
   @callback send_console(state, chars :: String.t()) :: :ok | {:error, term()}
 
-  # snapshots — return {:error, :unsupported} if not available
+  # snapshots -- return {:error, :unsupported} if not available
   @callback snapshot_create(state, snapshot_dir :: String.t()) :: :ok | {:error, term()}
   @callback snapshot_load(state, snapshot_dir :: String.t()) :: :ok | {:error, term()}
   @callback restore_from_snapshot(state, snapshot_dir :: String.t()) ::

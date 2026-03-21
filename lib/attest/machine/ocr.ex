@@ -15,7 +15,7 @@ defmodule Attest.Machine.OCR do
 
   ## Options
 
-  - `:tesseract` — path to tesseract binary (default: "tesseract")
+  - `:tesseract` -- path to tesseract binary (default: "tesseract")
   """
   @spec run_tesseract(Path.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def run_tesseract(image_path, opts \\ []) do
@@ -41,8 +41,8 @@ defmodule Attest.Machine.OCR do
 
   ## Options
 
-  - `:negate` — invert colours (default: false)
-  - `:magick` — path to magick binary (default: "magick")
+  - `:negate` -- invert colours (default: false)
+  - `:magick` -- path to magick binary (default: "magick")
   """
   @spec preprocess(Path.t(), keyword()) :: {:ok, Path.t()} | {:error, term()}
   def preprocess(image_path, opts \\ []) do

@@ -29,7 +29,7 @@ defmodule Attest.MachineConfig do
 
   ## Options
 
-  - `:state_dir` (required) — base directory for VM state files
+  - `:state_dir` (required) -- base directory for VM state files
   """
   @spec parse_file(String.t(), keyword()) :: parsed_config()
   def parse_file(path, opts) do

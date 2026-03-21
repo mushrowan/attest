@@ -14,20 +14,20 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
   ## Config
 
   Required keys:
-  - `:name` — machine name
-  - `:cloud_hypervisor_bin` — path to cloud-hypervisor binary
-  - `:kernel_image_path` — path to uncompressed vmlinux
-  - `:rootfs_path` — path to disk image (raw/ext4)
-  - `:state_dir` — working directory for sockets and logs
+  - `:name` -- machine name
+  - `:cloud_hypervisor_bin` -- path to cloud-hypervisor binary
+  - `:kernel_image_path` -- path to uncompressed vmlinux
+  - `:rootfs_path` -- path to disk image (raw/ext4)
+  - `:state_dir` -- working directory for sockets and logs
 
   Optional keys:
-  - `:initrd_path` — path to initrd (default: nil)
-  - `:kernel_boot_args` — kernel command line (default: "console=ttyS0 reboot=k panic=1")
-  - `:vcpu_count` — number of vCPUs (default: 1)
-  - `:mem_size_mib` — memory in MiB (default: 256)
-  - `:vsock_cid` — guest vsock CID (default: 3)
-  - `:vsock_port` — backdoor port (default: 1234)
-  - `:snapshot_path` — path to pre-built snapshot dir; when set, `start/1`
+  - `:initrd_path` -- path to initrd (default: nil)
+  - `:kernel_boot_args` -- kernel command line (default: "console=ttyS0 reboot=k panic=1")
+  - `:vcpu_count` -- number of vCPUs (default: 1)
+  - `:mem_size_mib` -- memory in MiB (default: 256)
+  - `:vsock_cid` -- guest vsock CID (default: 3)
+  - `:vsock_port` -- backdoor port (default: 1234)
+  - `:snapshot_path` -- path to pre-built snapshot dir; when set, `start/1`
     restores from snapshot instead of cold booting (default: nil)
   """
 
@@ -275,7 +275,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
     %{state | port_exited: true, ch_port: nil}
   end
 
-  # public — used by tests and nix integration
+  # public -- used by tests and nix integration
 
   @doc """
   Build the VmConfig JSON map for the cloud-hypervisor REST API

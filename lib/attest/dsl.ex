@@ -4,10 +4,10 @@ defmodule Attest.DSL do
 
   Provides helpers that make test scripts more readable:
 
-  - `subtest/2` — labelled sections with timing and pass/fail logging
-  - `assert_contains/2` — check a string contains a substring
-  - `assert_matches/2` — check a string matches a regex
-  - `retry/2` — retry a block until it succeeds
+  - `subtest/2` -- labelled sections with timing and pass/fail logging
+  - `assert_contains/2` -- check a string contains a substring
+  - `assert_matches/2` -- check a string matches a regex
+  - `retry/2` -- retry a block until it succeeds
 
   These are automatically available in test scripts evaluated via
   `Attest.TestScript`. For use in regular modules:
@@ -35,12 +35,12 @@ defmodule Attest.DSL do
     try do
       result = fun.()
       elapsed = System.monotonic_time(:millisecond) - start
-      Logger.info("subtest: #{label} — passed (#{elapsed}ms)")
+      Logger.info("subtest: #{label} -- passed (#{elapsed}ms)")
       result
     rescue
       e ->
         elapsed = System.monotonic_time(:millisecond) - start
-        Logger.error("subtest: #{label} — failed (#{elapsed}ms): #{Exception.message(e)}")
+        Logger.error("subtest: #{label} -- failed (#{elapsed}ms): #{Exception.message(e)}")
         reraise e, __STACKTRACE__
     end
   end

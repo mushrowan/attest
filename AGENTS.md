@@ -20,14 +20,17 @@ OTP-based reimplementation of the NixOS test driver, leveraging supervision tree
 
 ```
 lib/
-├── attest.ex                  # main API
+├── attest.ex                  # public API
 ├── attest/
 │   ├── application.ex         # OTP application, supervisors
 │   ├── cli.ex                 # escript CLI
-│   ├── dsl.ex                 # test script DSL (subtest, assertions, retry)
 │   ├── driver.ex              # test coordinator GenServer
+│   ├── dsl.ex                 # test script DSL (subtest, assertions, retry)
 │   ├── machine.ex             # VM GenServer
+│   ├── machine_config.ex      # JSON config parser
+│   ├── start_command.ex       # legacy start script builder
 │   ├── test_script.ex         # test script evaluator
+│   ├── vlan.ex                # VDE switch manager
 │   └── machine/
 │       ├── backend.ex         # backend behaviour + shared helpers
 │       ├── backend/
@@ -63,9 +66,11 @@ lib/
 
 See ARCHITECTURE.md for full design. Key points:
 - Each VM is a GenServer under MachineSupervisor
-- Driver coordinates test execution
-- QMP for VM control (screenshots, keyboard)
-- virtconsole shell for command execution
+- Driver manages machines, VLANs, and global timeout
+- Test script execution happens outside the driver (via TestScript module)
+- Pluggable backends (QEMU, firecracker, cloud-hypervisor, SSH, mock)
+- Pluggable transports (virtconsole, vsock, SSH)
+- Shell protocol is transport-agnostic (base64-encoded commands)
 
 ## Commands
 

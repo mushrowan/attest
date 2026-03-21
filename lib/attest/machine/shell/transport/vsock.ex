@@ -22,7 +22,7 @@ defmodule Attest.Machine.Shell.Transport.Vsock do
     connect_with_retry(uds_path, port, deadline)
   end
 
-  # retry the full connect cycle — the vsock UDS appears when
+  # retry the full connect cycle -- the vsock UDS appears when
   # firecracker starts but the guest listener isn't ready yet
   defp connect_with_retry(uds_path, port, deadline) do
     with {:ok, socket} <- connect_uds(uds_path, deadline),

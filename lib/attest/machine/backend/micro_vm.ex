@@ -16,7 +16,7 @@ defmodule Attest.Machine.Backend.MicroVM do
       alias Attest.Machine.Shell
       alias Attest.Machine.Shell.Transport.Vsock
 
-      # unsupported — no VGA, QMP, or SLIRP
+      # unsupported -- no VGA, QMP, or SLIRP
 
       @impl true
       def screenshot(_state, _filename), do: {:error, :unsupported}

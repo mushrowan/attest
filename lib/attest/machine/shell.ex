@@ -1,17 +1,17 @@
 defmodule Attest.Machine.Shell do
   @moduledoc """
-  Shell backdoor client for executing commands inside a guest VM
+  Shell client for executing commands inside a guest VM
 
-  The shell uses a transport to establish a connection, then communicates
-  using a base64-encoded command protocol. The transport is pluggable —
-  VirtConsole for QEMU/cloud-hypervisor, Vsock for firecracker (future).
-
-  ## Protocol
+  Uses a pluggable transport to establish a connection, then communicates
+  using a base64-encoded command protocol:
 
   1. Send: `bash -c '<command>' | (base64 -w 0; echo)\n`
   2. Recv: `<base64 encoded output>\n`
   3. Send: `echo ${PIPESTATUS[0]}\n`
   4. Recv: `<exit code>\n`
+
+  Transports: VirtConsole (QEMU), Vsock (firecracker/cloud-hypervisor),
+  SSH (remote hosts).
   """
 
   use GenServer
@@ -28,8 +28,8 @@ defmodule Attest.Machine.Shell do
 
   ## Options
 
-  - `:socket_path` (required) — unix socket path
-  - `:transport` — transport module (default: VirtConsole)
+  - `:socket_path` (required) -- unix socket path
+  - `:transport` -- transport module (default: VirtConsole)
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do

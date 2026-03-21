@@ -7,9 +7,9 @@ defmodule Attest.Machine.GuestScreenshot do
   and transferred back as base64.
 
   Supports three capture methods:
-  - `:fbgrab` — linux framebuffer capture (virtual console, no X needed)
-  - `:x11` — X11 root window capture via imagemagick's `import`
-  - `:grim` — wayland screenshot via grim
+  - `:fbgrab` -- linux framebuffer capture (virtual console, no X needed)
+  - `:x11` -- X11 root window capture via imagemagick's `import`
+  - `:grim` -- wayland screenshot via grim
 
   The guest NixOS config must include the required tools. Example:
 
@@ -36,8 +36,8 @@ defmodule Attest.Machine.GuestScreenshot do
   Take a screenshot via the guest shell and save to a host file
 
   Options:
-  - `:method` — capture method (`:fbgrab`, `:x11`, `:grim`), default: `:fbgrab`
-  - `:display` — X11 display (default: `:0`), only used with `:x11`
+  - `:method` -- capture method (`:fbgrab`, `:x11`, `:grim`), default: `:fbgrab`
+  - `:display` -- X11 display (default: `:0`), only used with `:x11`
   """
   @spec capture(GenServer.server(), String.t(), keyword()) :: :ok | {:error, term()}
   def capture(machine, host_path, opts \\ []) do

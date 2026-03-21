@@ -1,7 +1,7 @@
 # attest
 
 NixOS integration test driver in elixir. OTP supervision trees for VM lifecycle,
-pluggable backends (QEMU, firecracker, cloud-hypervisor), elixir test scripts
+pluggable backends (QEMU, firecracker, cloud-hypervisor, SSH), elixir test scripts
 instead of python.
 
 ## quick start
@@ -48,7 +48,11 @@ nix build .#checks.x86_64-linux.my-test -L
 |---------|-----------|------------|-------------|-----------|
 | QEMU | ~12s | VDE (userspace) | yes (QMP) | no |
 | firecracker | ~5s | TAP + bridge | yes (guest) | yes (~85ms restore) |
-| cloud-hypervisor | ~4.5s | TAP + bridge | yes (guest) | yes |
+| cloud-hypervisor | ~4.5s | TAP + bridge | yes (guest) | yes (pre-built or runtime) |
+| SSH | n/a | existing | no | no |
+
+the SSH backend connects to already-running hosts (cloud VMs, physical machines,
+containers with sshd) rather than managing a hypervisor.
 
 ### split store
 
@@ -73,7 +77,7 @@ nix.settings.extra-sandbox-paths = [ "/dev/net/tun" ];
 ```
 
 then rebuild (`sudo nixos-rebuild switch`). this is only needed for multi-VM
-tests with networking - single-VM tests work without it.
+tests with networking -- single-VM tests work without it.
 
 QEMU tests don't need this (they use VDE switches which are entirely userspace).
 
@@ -140,10 +144,10 @@ Attest.Machine.shutdown(machine)
 snapshot_create(machine, "/tmp/snap")
 snapshot_restore(machine, "/tmp/snap")
 
-# screenshots (QEMU — via QMP)
+# screenshots (QEMU -- via QMP)
 screenshot(machine, "/tmp/screen.ppm")
 
-# screenshots (firecracker/cloud-hypervisor — via guest shell)
+# screenshots (firecracker/cloud-hypervisor -- via guest shell)
 guest_screenshot(machine, "/tmp/screen.png")                 # fbgrab (default)
 guest_screenshot(machine, "/tmp/screen.png", method: :x11)   # X11
 
@@ -191,7 +195,7 @@ fc-snapshot:      cold=5354  restore=80
 ## development
 
 ```bash
-mix test                    # unit tests (225 tests)
+mix test                    # unit tests (271 tests)
 mix format                  # format
 nix flake check --quiet     # full check: build, format, tests, integration
 iex -S mix                  # repl

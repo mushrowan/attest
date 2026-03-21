@@ -3,7 +3,7 @@ defmodule Attest.Machine.Backend.Firecracker do
   Firecracker backend
 
   Manages firecracker microVM lifecycle: process spawning, REST API
-  configuration, vsock shell connection. No VGA, QMP, or SLIRP —
+  configuration, vsock shell connection. No VGA, QMP, or SLIRP --
   all VM interaction is via shell over vsock.
 
   ## Capabilities
@@ -15,24 +15,24 @@ defmodule Attest.Machine.Backend.Firecracker do
   ## Config
 
   Required keys:
-  - `:name` — machine name
-  - `:firecracker_bin` — path to firecracker binary
-  - `:kernel_image_path` — path to uncompressed vmlinux
-  - `:rootfs_path` — path to ext4 root filesystem image
-  - `:state_dir` — working directory for sockets and logs
+  - `:name` -- machine name
+  - `:firecracker_bin` -- path to firecracker binary
+  - `:kernel_image_path` -- path to uncompressed vmlinux
+  - `:rootfs_path` -- path to ext4 root filesystem image
+  - `:state_dir` -- working directory for sockets and logs
 
   Optional keys:
-  - `:initrd_path` — path to initrd (default: nil)
-  - `:kernel_boot_args` — kernel command line (default: "console=ttyS0 reboot=k panic=1")
-  - `:vcpu_count` — number of vCPUs (default: 1)
-  - `:mem_size_mib` — memory in MiB (default: 256)
-  - `:vsock_cid` — guest CID for vsock (default: 3)
-  - `:vsock_port` — guest port for shell backdoor (default: 1234)
-  - `:tap_interfaces` — list of {iface_id, host_dev_name, guest_mac} (default: [])
-  - `:extra_drives` — list of {drive_id, path, is_read_only} (default: [])
-  - `:log_level` — firecracker log level (default: "Warning")
-  - `:huge_pages` — huge page size, "2M" or nil (default: nil)
-  - `:entropy` — enable virtio-rng entropy device (default: false)
+  - `:initrd_path` -- path to initrd (default: nil)
+  - `:kernel_boot_args` -- kernel command line (default: "console=ttyS0 reboot=k panic=1")
+  - `:vcpu_count` -- number of vCPUs (default: 1)
+  - `:mem_size_mib` -- memory in MiB (default: 256)
+  - `:vsock_cid` -- guest CID for vsock (default: 3)
+  - `:vsock_port` -- guest port for shell backdoor (default: 1234)
+  - `:tap_interfaces` -- list of {iface_id, host_dev_name, guest_mac} (default: [])
+  - `:extra_drives` -- list of {drive_id, path, is_read_only} (default: [])
+  - `:log_level` -- firecracker log level (default: "Warning")
+  - `:huge_pages` -- huge page size, "2M" or nil (default: nil)
+  - `:entropy` -- enable virtio-rng entropy device (default: false)
   """
 
   @behaviour Attest.Machine.Backend
@@ -246,7 +246,7 @@ defmodule Attest.Machine.Backend.Firecracker do
     snapshot_path = Path.join(snapshot_dir, "snapshot_file")
     mem_path = Path.join(snapshot_dir, "mem_file")
 
-    # retry snapshot load — the API socket file may appear before FC is listening
+    # retry snapshot load -- the API socket file may appear before FC is listening
     retry_api(fn ->
       API.put(api, "/snapshot/load", %{
         "snapshot_path" => snapshot_path,
@@ -292,7 +292,7 @@ defmodule Attest.Machine.Backend.Firecracker do
   defp configure_vm(state) do
     api = state.api_socket_path
 
-    # logger (retry — socket file may appear before FC is listening)
+    # logger (retry -- socket file may appear before FC is listening)
     :ok =
       retry_api(fn ->
         API.put(api, "/logger", %{

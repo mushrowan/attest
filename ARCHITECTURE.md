@@ -42,45 +42,55 @@ Machine GenServer (public API)
 ├── execute, wait_for_unit, wait_for_open_port (shell-based)
 ├── start, shutdown, halt, screenshot (delegated to backend)
 └── delegates to Backend behaviour
-    ├── Backend.QEMU            — Port.open, QMP, virtconsole shell
-    ├── Backend.Firecracker     — REST API, vsock shell, TAP networking
-    ├── Backend.CloudHypervisor — REST API, vsock shell, TAP networking
-    ├── Backend.SSH             — SSH shell, no hypervisor
-    └── Backend.Mock            — injected pids for unit tests
+    ├── Backend.QEMU            -- Port.open, QMP, virtconsole shell
+    ├── Backend.Firecracker     -- REST API, vsock shell, TAP networking
+    ├── Backend.CloudHypervisor -- REST API, vsock shell, TAP networking
+    ├── Backend.SSH             -- SSH shell, no hypervisor
+    └── Backend.Mock            -- injected pids for unit tests
 
 Shell GenServer (command protocol)
 └── delegates connection to Transport behaviour
-    ├── Transport.VirtConsole — listen/accept on unix socket
-    ├── Transport.Vsock       — firecracker vsock CONNECT protocol
-    └── Transport.SSH         — SSH channel via bridge GenServer
+    ├── Transport.VirtConsole -- listen/accept on unix socket
+    ├── Transport.Vsock       -- firecracker vsock CONNECT protocol
+    └── Transport.SSH         -- SSH channel via bridge GenServer
 ```
 
 ## file structure
 
 ```
-lib/attest/
-├── application.ex                   # OTP app, supervisors
-├── cli.ex                           # escript CLI (eval, eval-file)
-├── driver.ex                        # test coordinator GenServer
-├── machine.ex                       # VM GenServer, delegates to backend
-└── machine/
-    ├── backend.ex                   # @behaviour (14 callbacks)
-    ├── backend/
-    │   ├── api.ex                   # HTTP/1.1 client over UDS (shared)
-    │   ├── micro_vm.ex              # shared microVM macro (vsock, TAP, stubs)
-    │   ├── qemu.ex                  # QEMU: Port.open, QMP, shell
-    │   ├── firecracker.ex           # Firecracker: REST API, vsock, snapshots
-    │   ├── cloud_hypervisor.ex      # Cloud Hypervisor: REST API, vsock, snapshots
-    │   ├── ssh.ex                   # SSH: remote host, no hypervisor
-    │   └── mock.ex                  # unit test mock
-    ├── qmp.ex                       # QMP protocol client GenServer
-    ├── shell.ex                     # command protocol GenServer
-    └── shell/
-        ├── transport.ex             # @behaviour (connect, send, recv, close)
-        └── transport/
-            ├── virtconsole.ex       # unix socket listen/accept
-            ├── vsock.ex             # firecracker vsock CONNECT
-            └── ssh.ex               # SSH channel + bridge GenServer
+lib/
+├── attest.ex                        # public API (succeed, fail, wait_for_unit, etc.)
+└── attest/
+    ├── application.ex               # OTP app, supervisors
+    ├── cli.ex                       # escript CLI (eval, eval-file)
+    ├── driver.ex                    # test coordinator GenServer
+    ├── dsl.ex                       # test script helpers (subtest, retry, assertions)
+    ├── machine.ex                   # VM GenServer, delegates to backend
+    ├── machine_config.ex            # JSON config parser
+    ├── start_command.ex             # legacy start script builder
+    ├── test_script.ex               # test script evaluator
+    ├── vlan.ex                      # VDE switch manager
+    └── machine/
+        ├── backend.ex               # @behaviour (14 callbacks)
+        ├── backend/
+        │   ├── api.ex               # HTTP/1.1 client over UDS (shared)
+        │   ├── micro_vm.ex          # shared microVM macro (vsock, TAP, stubs)
+        │   ├── qemu.ex              # QEMU: Port.open, QMP, shell
+        │   ├── firecracker.ex       # firecracker: REST API, vsock, snapshots
+        │   ├── cloud_hypervisor.ex  # cloud-hypervisor: REST API, vsock, snapshots
+        │   ├── ssh.ex               # SSH: remote host, no hypervisor
+        │   └── mock.ex              # unit test mock
+        ├── guest_screenshot.ex      # in-guest screenshot capture (fbgrab/X11)
+        ├── keyboard.ex              # key name mapping
+        ├── ocr.ex                   # OCR via tesseract
+        ├── qmp.ex                   # QMP protocol client GenServer
+        ├── shell.ex                 # command protocol GenServer
+        └── shell/
+            ├── transport.ex         # @behaviour (connect, send, recv, close)
+            └── transport/
+                ├── virtconsole.ex   # unix socket listen/accept
+                ├── vsock.ex         # firecracker vsock CONNECT
+                └── ssh.ex           # SSH channel + bridge GenServer
 ```
 
 ## module details
@@ -107,12 +117,12 @@ backend-specific through the Backend behaviour.
 each backend owns the full boot sequence: process spawning, control
 plane connection, shell setup. callbacks:
 
-- `init/1`, `start/1` — lifecycle
-- `shutdown/2`, `halt/2`, `wait_for_shutdown/2` — teardown
-- `cleanup/1` — resource cleanup
-- `screenshot/2`, `send_key/2` — optional capabilities
-- `handle_port_exit/2` — port exit notification
-- `capabilities/1` — introspection
+- `init/1`, `start/1` -- lifecycle
+- `shutdown/2`, `halt/2`, `wait_for_shutdown/2` -- teardown
+- `cleanup/1` -- resource cleanup
+- `screenshot/2`, `send_key/2` -- optional capabilities
+- `handle_port_exit/2` -- port exit notification
+- `capabilities/1` -- introspection
 
 ### Backend.QEMU
 
@@ -231,7 +241,3 @@ nix/
 │   └── make-test.nix         # CH: reuses FC rootfs/store, PCI transport
 └── bench.nix                 # backend comparison benchmark
 ```
-
-## future work
-
-(none currently planned)

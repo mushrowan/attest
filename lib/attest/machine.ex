@@ -8,8 +8,8 @@ defmodule Attest.Machine do
 
   ## Backends
 
-  - `Backend.QEMU` — Port.open, QMP, virtconsole shell
-  - `Backend.Mock` — injected pids for unit tests
+  - `Backend.QEMU` -- Port.open, QMP, virtconsole shell
+  - `Backend.Mock` -- injected pids for unit tests
   """
   use GenServer
 
@@ -39,8 +39,8 @@ defmodule Attest.Machine do
 
   ## Options
 
-  - `:name` (required) — machine name
-  - `:backend` — backend module (default: `Backend.QEMU`)
+  - `:name` (required) -- machine name
+  - `:backend` -- backend module (default: `Backend.QEMU`)
   - all other opts are passed to the backend's `init/1` as a map
   """
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -623,7 +623,7 @@ defmodule Attest.Machine do
 
   ## Options
 
-  - `:timeout` — max wait time in ms (default: 900_000)
+  - `:timeout` -- max wait time in ms (default: 900_000)
   """
   @spec wait_for_text(GenServer.server(), Regex.t(), keyword()) :: :ok | {:error, :timeout}
   def wait_for_text(machine, regex, opts \\ []) do
@@ -924,7 +924,7 @@ defmodule Attest.Machine do
     {:reply, state.console_log, state}
   end
 
-  # port stdout/stderr data — buffer and log complete lines
+  # port stdout/stderr data -- buffer and log complete lines
   @impl true
   def handle_info({port, {:data, data}}, state) when is_port(port) do
     text = to_string(data)

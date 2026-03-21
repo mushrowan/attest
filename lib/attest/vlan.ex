@@ -25,8 +25,8 @@ defmodule Attest.VLan do
 
   ## Options
 
-  - `:nr` (required) — VLAN number
-  - `:tmp_dir` (required) — base directory for VDE sockets
+  - `:nr` (required) -- VLAN number
+  - `:tmp_dir` (required) -- base directory for VDE sockets
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
