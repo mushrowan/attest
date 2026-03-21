@@ -50,21 +50,28 @@ defmodule Attest.Machine.Shell.Transport.SSH do
   def close(bridge), do: Bridge.stop(bridge)
 
   defp build_connect_opts(config, user) do
-    base = [
+    # always set user_dir to avoid ssh_file trying to access ~/.ssh
+    # which fails in sandboxed environments (nix build, CI)
+    user_dir =
+      if Map.has_key?(config, :user_dir) do
+        String.to_charlist(config.user_dir)
+      else
+        tmp = Path.join(System.tmp_dir!(), "attest-ssh-#{:rand.uniform(100_000)}")
+        File.mkdir_p!(tmp)
+        String.to_charlist(tmp)
+      end
+
+    opts = [
       {:user, user},
+      {:user_dir, user_dir},
       {:silently_accept_hosts, true},
       {:user_interaction, false}
     ]
 
-    cond do
-      Map.has_key?(config, :password) ->
-        [{:password, String.to_charlist(config.password)} | base]
-
-      Map.has_key?(config, :user_dir) ->
-        [{:user_dir, String.to_charlist(config.user_dir)} | base]
-
-      true ->
-        base
+    if Map.has_key?(config, :password) do
+      [{:password, String.to_charlist(config.password)} | opts]
+    else
+      opts
     end
   end
 end
