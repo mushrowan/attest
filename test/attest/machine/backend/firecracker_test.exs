@@ -186,6 +186,33 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
       {:ok, state} = Firecracker.init(config)
       assert state.pmem_devices == []
     end
+
+    test "debug_boot appends systemd debug params to kernel args" do
+      config = %{
+        name: "debug-boot",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4",
+        debug_boot: true
+      }
+
+      {:ok, state} = Firecracker.init(config)
+      assert state.kernel_boot_args =~ "systemd.log_level=debug"
+      assert state.kernel_boot_args =~ "systemd.log_target=console"
+      assert state.kernel_boot_args =~ "console=ttyS0"
+    end
+
+    test "debug_boot defaults to false" do
+      config = %{
+        name: "no-debug",
+        firecracker_bin: "/usr/bin/firecracker",
+        kernel_image_path: "/path/to/vmlinux",
+        rootfs_path: "/path/to/rootfs.ext4"
+      }
+
+      {:ok, state} = Firecracker.init(config)
+      refute state.kernel_boot_args =~ "systemd.log_level"
+    end
   end
 
   describe "capabilities/1" do

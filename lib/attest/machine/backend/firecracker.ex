@@ -94,7 +94,7 @@ defmodule Attest.Machine.Backend.Firecracker do
        kernel_image_path: Map.get(config, :kernel_image_path),
        rootfs_path: Map.get(config, :rootfs_path),
        initrd_path: Map.get(config, :initrd_path),
-       kernel_boot_args: Map.get(config, :kernel_boot_args, @default_boot_args),
+       kernel_boot_args: Backend.resolve_boot_args(config, @default_boot_args),
        vcpu_count: Map.get(config, :vcpu_count, 1),
        mem_size_mib: Map.get(config, :mem_size_mib, 256),
        vsock_cid: Map.get(config, :vsock_cid, 3),

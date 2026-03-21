@@ -44,6 +44,17 @@ defmodule Attest.Machine.Backend do
 
   # shared helpers for microVM backends
 
+  @debug_boot_args "systemd.log_level=debug systemd.log_target=console"
+
+  @doc """
+  Resolve kernel boot args, appending systemd debug params if `debug_boot` is set
+  """
+  @spec resolve_boot_args(map(), String.t()) :: String.t()
+  def resolve_boot_args(config, default_args) do
+    args = Map.get(config, :kernel_boot_args, default_args)
+    if Map.get(config, :debug_boot, false), do: args <> " " <> @debug_boot_args, else: args
+  end
+
   @doc """
   Poll for a file to appear on disk
   """

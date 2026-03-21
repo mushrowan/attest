@@ -48,6 +48,25 @@ defmodule Attest.Machine.Backend.CloudHypervisorTest do
       {:ok, state} = CloudHypervisor.init(config)
       assert state.snapshot_path == nil
     end
+
+    test "debug_boot appends systemd debug params to kernel args" do
+      config = %{
+        name: "debug-ch",
+        state_dir: "/tmp/ch-debug",
+        debug_boot: true
+      }
+
+      {:ok, state} = CloudHypervisor.init(config)
+      assert state.kernel_boot_args =~ "systemd.log_level=debug"
+      assert state.kernel_boot_args =~ "systemd.log_target=console"
+      assert state.kernel_boot_args =~ "console=ttyS0"
+    end
+
+    test "debug_boot defaults to false" do
+      config = %{name: "no-debug-ch", state_dir: "/tmp/ch-no-debug"}
+      {:ok, state} = CloudHypervisor.init(config)
+      refute state.kernel_boot_args =~ "systemd.log_level"
+    end
   end
 
   describe "capabilities/1" do
