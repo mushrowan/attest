@@ -27,6 +27,8 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
   - `:mem_size_mib` — memory in MiB (default: 256)
   - `:vsock_cid` — guest vsock CID (default: 3)
   - `:vsock_port` — backdoor port (default: 1234)
+  - `:snapshot_path` — path to pre-built snapshot dir; when set, `start/1`
+    restores from snapshot instead of cold booting (default: nil)
   """
 
   @behaviour Attest.Machine.Backend
