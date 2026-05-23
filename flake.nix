@@ -110,9 +110,27 @@
               doCheck = true;
 
               installPhase = ''
+                runHook preInstall
                 touch $out
+                runHook postInstall
               '';
+
+              dontFixup = true;
             };
+
+            perf-budget = pkgs.runCommand "attest-perf-budget" { } ''
+              mkdir -p $out
+              cat > $out/README <<'EOF'
+              Performance budget notes
+
+              This check is intentionally non-failing for now. Runtime budgets are
+              collected from attest artifacts during VM checks. Once timings are
+              stable enough across builders, promote the useful thresholds into
+              failing checks.
+
+              Current warm full-flake target: under 3 minutes.
+              EOF
+            '';
           }
           // lib.optionalAttrs pkgs.stdenv.isLinux (
             let
@@ -203,14 +221,13 @@
                 testScript = ''
                   start_all.()
                   Attest.wait_for_unit(machine, "multi-user.target")
-                  IO.puts("cold boot done, creating snapshot...")
                   Attest.snapshot_create(machine, "/tmp/snap")
-                  IO.puts("restoring from snapshot...")
                   Attest.snapshot_restore(machine, "/tmp/snap")
-                  IO.puts("executing command after restore...")
                   result = Attest.succeed(machine, "echo restored-ok")
-                  IO.puts("result: #{result}")
-                  IO.puts("snapshot restore test passed!")
+
+                  unless String.contains?(result, "restored-ok") do
+                    raise "unexpected output after restore: #{inspect(result)}"
+                  end
                 '';
               };
               # pre-built snapshot: VM boots from cached snapshot (~128ms restore)
@@ -228,13 +245,15 @@
 
                   # VM should already be at multi-user.target (restored from snapshot)
                   output = Attest.succeed(machine, "systemctl is-active multi-user.target")
-                  IO.puts("multi-user.target: #{String.trim(output)}")
+
+                  unless String.trim(output) == "active" do
+                    raise "multi-user.target was not active: #{inspect(output)}"
+                  end
 
                   output = Attest.succeed(machine, "echo hello-from-prebuilt-snapshot")
                   unless String.contains?(output, "hello-from-prebuilt-snapshot") do
                     raise "unexpected: #{inspect(output)}"
                   end
-                  IO.puts("pre-built snapshot test passed!")
                 '';
               };
               # firecracker split-store smoke test (erofs nix store + minimal rootfs)
@@ -287,26 +306,19 @@
 
                   # verify both VMs have IPs
                   alice_ip = Attest.succeed(alice, "ip -4 addr show eth0 | grep inet")
-                  IO.puts("alice: #{String.trim(alice_ip)}")
                   unless String.contains?(alice_ip, "192.168.1.1"), do: raise("alice should be .1")
 
                   bob_ip = Attest.succeed(bob, "ip -4 addr show eth0 | grep inet")
-                  IO.puts("bob: #{String.trim(bob_ip)}")
                   unless String.contains?(bob_ip, "192.168.1.2"), do: raise("bob should be .2")
 
                   # ping each other
                   Attest.succeed(alice, "ping -c 1 -W 3 192.168.1.2")
-                  IO.puts("alice -> bob: ok")
                   Attest.succeed(bob, "ping -c 1 -W 3 192.168.1.1")
-                  IO.puts("bob -> alice: ok")
 
                   # hostname resolution via /etc/hosts
                   Attest.succeed(alice, "ping -c 1 -W 3 bob")
-                  IO.puts("alice -> bob (hostname): ok")
                   Attest.succeed(bob, "ping -c 1 -W 3 alice")
-                  IO.puts("bob -> alice (hostname): ok")
 
-                  IO.puts("network test passed!")
                 '';
               };
               # cloud-hypervisor make-test smoke test (ext4 rootfs, vmlinux, vsock)
@@ -350,24 +362,17 @@
                   start_all.()
 
                   alice_ip = Attest.succeed(alice, "ip -4 addr show eth0 | grep inet")
-                  IO.puts("alice: #{String.trim(alice_ip)}")
                   unless String.contains?(alice_ip, "192.168.1.1"), do: raise("alice should be .1")
 
                   bob_ip = Attest.succeed(bob, "ip -4 addr show eth0 | grep inet")
-                  IO.puts("bob: #{String.trim(bob_ip)}")
                   unless String.contains?(bob_ip, "192.168.1.2"), do: raise("bob should be .2")
 
                   Attest.succeed(alice, "ping -c 1 -W 3 192.168.1.2")
-                  IO.puts("alice -> bob: ok")
                   Attest.succeed(bob, "ping -c 1 -W 3 192.168.1.1")
-                  IO.puts("bob -> alice: ok")
 
                   Attest.succeed(alice, "ping -c 1 -W 3 bob")
-                  IO.puts("alice -> bob (hostname): ok")
                   Attest.succeed(bob, "ping -c 1 -W 3 alice")
-                  IO.puts("bob -> alice (hostname): ok")
 
-                  IO.puts("ch network test passed!")
                 '';
               };
             }

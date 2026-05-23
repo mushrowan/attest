@@ -108,7 +108,7 @@ defmodule Attest.Machine.QMP do
     # connect synchronously during init
     case connect_and_negotiate(socket_path) do
       {:ok, socket} ->
-        Logger.info("QMP connected to #{socket_path}")
+        Logger.debug("QMP connected to #{socket_path}")
         {:ok, %__MODULE__{socket: socket, socket_path: socket_path}}
 
       {:error, reason} ->

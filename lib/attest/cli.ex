@@ -170,7 +170,7 @@ defmodule Attest.CLI do
       )
 
     if opts.test_script do
-      Logger.info("running test script: #{opts.test_script}")
+      Logger.debug("running test script: #{opts.test_script}")
 
       try do
         TestScript.eval_file(opts.test_script, driver)

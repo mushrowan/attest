@@ -62,7 +62,7 @@ defmodule Attest.Machine.Backend.MicroVM do
       defp connect_shell(state) do
         :ok = Backend.wait_for_file(state.vsock_uds_path, 30_000)
 
-        Logger.info("connecting shell via vsock for #{state.name}")
+        Logger.debug("connecting shell via vsock for #{state.name}")
 
         {:ok, shell} =
           Shell.start_link(

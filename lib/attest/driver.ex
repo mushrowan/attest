@@ -118,7 +118,7 @@ defmodule Attest.Driver do
 
   @impl true
   def handle_call(:start_all, _from, state) do
-    Logger.info("starting all machines")
+    Logger.debug("starting all machines")
 
     # start all machines in parallel (5 min timeout for VM boot)
     state.machines
@@ -165,7 +165,7 @@ defmodule Attest.Driver do
 
   @impl true
   def terminate(reason, state) do
-    Logger.info("driver terminating: #{inspect(reason)}")
+    Logger.debug("driver terminating: #{inspect(reason)}")
 
     # cancel timeout if still pending
     if state.timeout_ref do
@@ -200,7 +200,7 @@ defmodule Attest.Driver do
       safe_stop(pid)
     end
 
-    Logger.info("all machines shut down")
+    Logger.debug("all machines shut down")
     :ok
   end
 

@@ -53,7 +53,7 @@ defmodule Attest.Machine.Backend.QEMU do
     # this creates the unix socket that QEMU's chardev connects to
     shell_task =
       if shell_pid do
-        Logger.info("waiting for shell connection on #{state.name}")
+        Logger.debug("waiting for shell connection on #{state.name}")
 
         Task.async(fn ->
           Shell.wait_for_connection(shell_pid, 120_000)
@@ -67,7 +67,7 @@ defmodule Attest.Machine.Backend.QEMU do
     # spawn QEMU process if start_command provided
     state =
       if state.start_command do
-        Logger.info("spawning QEMU for #{state.name}")
+        Logger.debug("spawning QEMU for #{state.name}")
 
         port =
           Port.open({:spawn, state.start_command}, [:binary, :exit_status, :stderr_to_stdout])
@@ -100,7 +100,7 @@ defmodule Attest.Machine.Backend.QEMU do
   end
 
   def shutdown(%{shell: shell} = state, timeout) do
-    Logger.info("shutting down #{state.name}")
+    Logger.debug("shutting down #{state.name}")
 
     case Shell.execute(shell, "poweroff") do
       {:ok, _, _} -> :ok
@@ -158,7 +158,7 @@ defmodule Attest.Machine.Backend.QEMU do
   end
 
   def screenshot(%{qmp: qmp}, filename) do
-    Logger.info("taking screenshot: #{filename}")
+    Logger.debug("taking screenshot: #{filename}")
 
     case QMP.command(qmp, "screendump", %{"filename" => filename}) do
       {:ok, _} -> :ok

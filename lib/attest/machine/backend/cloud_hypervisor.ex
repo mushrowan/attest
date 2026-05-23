@@ -99,7 +99,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
     File.rm(state.vsock_uds_path)
 
     # spawn cloud-hypervisor process
-    Logger.info("spawning cloud-hypervisor for #{state.name}")
+    Logger.debug("spawning cloud-hypervisor for #{state.name}")
 
     cmd = "#{state.cloud_hypervisor_bin} --api-socket #{state.api_socket_path}"
 
@@ -112,11 +112,11 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
     :ok = wait_for_file(state.api_socket_path, 10_000)
 
     # create and boot VM via REST API
-    Logger.info("creating cloud-hypervisor VM #{state.name}")
+    Logger.debug("creating cloud-hypervisor VM #{state.name}")
     vm_config = build_vm_config(state)
     :ok = API.put(state.api_socket_path, "/api/v1/vm.create", vm_config)
 
-    Logger.info("booting cloud-hypervisor VM #{state.name}")
+    Logger.debug("booting cloud-hypervisor VM #{state.name}")
     :ok = API.put_no_body(state.api_socket_path, "/api/v1/vm.boot")
 
     # connect shell via vsock
@@ -139,7 +139,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
   end
 
   def shutdown(%{shell: shell} = state, timeout) do
-    Logger.info("shutting down #{state.name}")
+    Logger.debug("shutting down #{state.name}")
 
     # reboot -f -p: force immediate power-off (no ACPI needed)
     case Shell.execute(shell, "reboot -f -p") do
@@ -154,7 +154,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
 
   @impl true
   def halt(state, timeout) do
-    Logger.info("halting #{state.name}")
+    Logger.debug("halting #{state.name}")
 
     # try power button first, then VMM shutdown
     if File.exists?(state.api_socket_path) do

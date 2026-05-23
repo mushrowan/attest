@@ -37,22 +37,17 @@ let
   # copies rootfs + snapshot to /tmp/snapshot-out/<name>/
   testScript = ''
     ${lib.concatMapStringsSep "\n" (nodeName: ''
-      IO.puts("${nodeName}: starting")
       Attest.Machine.start(${nodeName})
       Attest.wait_for_unit(${nodeName}, "multi-user.target")
       Attest.succeed(${nodeName}, "sync")
-      IO.puts("${nodeName}: ready, creating snapshot")
       Attest.snapshot_create(${nodeName}, "/tmp/snapshot-out/${nodeName}")
       state_dir = Attest.Machine.state_dir(${nodeName})
       rootfs = Path.join(state_dir, "rootfs.ext4")
       File.cp!(rootfs, "/tmp/snapshot-out/${nodeName}/rootfs.ext4")
-      IO.puts("${nodeName}: snapshot + rootfs saved")
       # VM is paused after snapshot, force-kill it
       Attest.Machine.halt(${nodeName})
-      IO.puts("${nodeName}: done")
     '') sortedNames}
 
-    IO.puts("all snapshots ready")
   '';
 
   machines = lib.mapAttrsToList (

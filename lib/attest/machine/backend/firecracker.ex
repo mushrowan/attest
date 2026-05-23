@@ -131,7 +131,7 @@ defmodule Attest.Machine.Backend.Firecracker do
     File.rm(state.vsock_uds_path)
 
     # spawn firecracker process
-    Logger.info("spawning firecracker for #{state.name}")
+    Logger.debug("spawning firecracker for #{state.name}")
 
     port =
       Port.open({:spawn, fc_cmd(state)}, [:binary, :exit_status, :stderr_to_stdout])
@@ -145,7 +145,7 @@ defmodule Attest.Machine.Backend.Firecracker do
     :ok = configure_vm(state)
 
     # boot
-    Logger.info("booting firecracker VM #{state.name}")
+    Logger.debug("booting firecracker VM #{state.name}")
     :ok = API.put(state.api_socket_path, "/actions", %{"action_type" => "InstanceStart"})
 
     # wait for vsock UDS and connect shell
@@ -187,7 +187,7 @@ defmodule Attest.Machine.Backend.Firecracker do
   end
 
   def shutdown(%{shell: shell} = state, timeout) do
-    Logger.info("shutting down #{state.name}")
+    Logger.debug("shutting down #{state.name}")
 
     # reboot -f -p: force immediate power-off (no init, no ACPI needed)
     case Shell.execute(shell, "reboot -f -p") do
@@ -203,7 +203,7 @@ defmodule Attest.Machine.Backend.Firecracker do
 
   @impl true
   def halt(state, timeout) do
-    Logger.info("halting #{state.name}")
+    Logger.debug("halting #{state.name}")
 
     # try SendCtrlAltDel first, then force-kill
     if File.exists?(state.api_socket_path) do

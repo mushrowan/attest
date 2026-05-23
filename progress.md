@@ -23,6 +23,8 @@
 - ran `nupd`; only nixpkgs advanced, Hex deps unchanged
 - made `nupd` validate with `mix test` and `nix build .#attest --no-link`
 - overrode devshell `mix2nix` to use the project headless BEAM package set
+- quieted successful integration logs and removed test-check release fixup noise
+- added non-failing `perf-budget` check documenting the current warm flake target
 - updated flake inputs and Hex deps
 - nix package dependency hashes refreshed for updated lock files
 - `mix test` and package/test nix builds green, full flake check still building after cache misses

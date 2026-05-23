@@ -25,10 +25,10 @@ defmodule Attest.Machine.Shell.Transport.VirtConsole do
              {:active, false},
              {:ip, {:local, socket_path}}
            ]),
-         _ = Logger.info("shell listening on #{socket_path}"),
+         _ = Logger.debug("shell listening on #{socket_path}"),
          {:ok, socket} <- accept_or_close(listen_socket, timeout),
          :ok <- wait_or_close(socket, listen_socket, timeout) do
-      Logger.info("shell backdoor connected")
+      Logger.debug("shell backdoor connected")
       :gen_tcp.close(listen_socket)
       {:ok, socket}
     end

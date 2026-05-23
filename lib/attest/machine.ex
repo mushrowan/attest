@@ -732,18 +732,18 @@ defmodule Attest.Machine do
       callbacks: Keyword.get(opts, :callbacks, [])
     }
 
-    Logger.info("machine #{state.name} initialized")
+    Logger.debug("machine #{state.name} initialized")
     {:ok, state}
   end
 
   @impl true
   def handle_call(:start, _from, state) do
-    Logger.info("starting machine #{state.name}")
+    Logger.debug("starting machine #{state.name}")
 
     {duration_ms, {:ok, shell_pid, backend_state}} =
       timed(fn -> state.backend_mod.start(state.backend_state) end)
 
-    Logger.info("timing #{state.name}.start=#{duration_ms}ms")
+    Logger.debug("timing #{state.name}.start=#{duration_ms}ms")
 
     state = %{
       state
@@ -771,12 +771,12 @@ defmodule Attest.Machine do
 
   @impl true
   def handle_call({:shutdown, timeout}, _from, state) do
-    Logger.info("shutting down machine #{state.name}")
+    Logger.debug("shutting down machine #{state.name}")
 
     {duration_ms, result} =
       timed(fn -> state.backend_mod.shutdown(state.backend_state, timeout) end)
 
-    Logger.info("timing #{state.name}.shutdown=#{duration_ms}ms")
+    Logger.debug("timing #{state.name}.shutdown=#{duration_ms}ms")
 
     {:reply, result,
      %{
@@ -790,7 +790,7 @@ defmodule Attest.Machine do
 
   @impl true
   def handle_call({:halt, timeout}, _from, state) do
-    Logger.info("halting machine #{state.name}")
+    Logger.debug("halting machine #{state.name}")
     result = state.backend_mod.halt(state.backend_state, timeout)
     {:reply, result, %{state | booted: false, connected: false, shell: nil}}
   end
@@ -830,10 +830,10 @@ defmodule Attest.Machine do
 
   @impl true
   def handle_call({:wait_for_unit, unit, timeout}, _from, %{shell: shell} = state) do
-    Logger.info("waiting for unit #{unit} on #{state.name}")
+    Logger.debug("waiting for unit #{unit} on #{state.name}")
 
     {duration_ms, result} = timed(fn -> wait_unit_guest(shell, unit, timeout) end)
-    Logger.info("timing #{state.name}.wait_for_unit=#{duration_ms}ms unit=#{unit}")
+    Logger.debug("timing #{state.name}.wait_for_unit=#{duration_ms}ms unit=#{unit}")
 
     state = %{
       state
@@ -866,7 +866,7 @@ defmodule Attest.Machine do
 
   @impl true
   def handle_call({:screenshot, filename}, _from, state) do
-    Logger.info("taking screenshot: #{filename}")
+    Logger.debug("taking screenshot: #{filename}")
     result = state.backend_mod.screenshot(state.backend_state, filename)
     {:reply, result, state}
   end
@@ -940,7 +940,7 @@ defmodule Attest.Machine do
 
   @impl true
   def handle_call({:snapshot_create, snapshot_dir}, _from, state) do
-    Logger.info("creating snapshot for #{state.name} in #{snapshot_dir}")
+    Logger.debug("creating snapshot for #{state.name} in #{snapshot_dir}")
     result = state.backend_mod.snapshot_create(state.backend_state, snapshot_dir)
     {:reply, result, state}
   end

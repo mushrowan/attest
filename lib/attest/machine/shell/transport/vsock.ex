@@ -29,7 +29,7 @@ defmodule Attest.Machine.Shell.Transport.Vsock do
          :ok <- send_connect(socket, port),
          :ok <- recv_ok(socket, remaining(deadline)),
          :ok <- wait_for_backdoor_ready(socket, remaining(deadline)) do
-      Logger.info("vsock connected to port #{port}")
+      Logger.debug("vsock connected to port #{port}")
       {:ok, socket}
     else
       {:error, reason} when reason in [:closed, :econnrefused, :econnreset] ->
