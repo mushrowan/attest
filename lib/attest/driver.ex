@@ -24,7 +24,8 @@ defmodule Attest.Driver do
     :out_dir,
     :tmp_dir,
     :global_timeout,
-    :timeout_ref
+    :timeout_ref,
+    :started_at
   ]
 
   # client API
@@ -83,7 +84,8 @@ defmodule Attest.Driver do
       vlan_pids: vlan_pids,
       tmp_dir: tmp_dir,
       out_dir: Keyword.get(opts, :out_dir, tmp_dir),
-      global_timeout: Keyword.get(opts, :global_timeout, 3_600_000)
+      global_timeout: Keyword.get(opts, :global_timeout, 3_600_000),
+      started_at: System.monotonic_time(:millisecond)
     }
 
     # start global timeout timer
@@ -227,6 +229,15 @@ defmodule Attest.Driver do
   defp write_artifacts(state) do
     artifacts_dir = Path.join(state.out_dir || state.tmp_dir, "machines")
     File.mkdir_p!(artifacts_dir)
+
+    run_duration_ms =
+      System.monotonic_time(:millisecond) -
+        (state.started_at || System.monotonic_time(:millisecond))
+
+    File.write!(
+      Path.join(Path.dirname(artifacts_dir), "timings.json"),
+      Jason.encode!(%{duration_ms: run_duration_ms}, pretty: true)
+    )
 
     for {name, pid} <- state.machines || %{} do
       machine_dir = Path.join(artifacts_dir, name)

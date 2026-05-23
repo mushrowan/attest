@@ -327,6 +327,7 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
       assert_receive {:api_call, :snapshot_create, snap_data}
       assert snap_data =~ "PUT /snapshot/create"
       assert snap_data =~ "snapshot_file"
+      assert snap_data =~ "mem_file_path"
       assert snap_data =~ "mem_file"
 
       Process.exit(server, :normal)

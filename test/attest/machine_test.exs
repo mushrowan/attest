@@ -26,9 +26,7 @@ defmodule Attest.MachineTest do
 
       :ok = Machine.start(machine)
 
-      # give the command time to execute
-      Process.sleep(100)
-      assert File.exists?(marker)
+      assert eventually(fn -> File.exists?(marker) end)
 
       GenServer.stop(machine)
       File.rm(marker)
@@ -969,8 +967,7 @@ defmodule Attest.MachineTest do
         )
 
       :ok = Machine.start(machine)
-      Process.sleep(50)
-      assert File.exists?(marker)
+      assert eventually(fn -> File.exists?(marker) end)
 
       assert :ok = Machine.wait_for_shutdown(machine, 5000)
 
@@ -2117,6 +2114,27 @@ defmodule Attest.MachineTest do
 
       {:error, _} ->
         :ok
+    end
+  end
+
+  defp eventually(fun, timeout \\ 5_000) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    eventually(fun, deadline, false)
+  end
+
+  defp eventually(fun, deadline, _last_result) do
+    result = fun.()
+
+    cond do
+      result ->
+        result
+
+      System.monotonic_time(:millisecond) >= deadline ->
+        result
+
+      true ->
+        Process.sleep(10)
+        eventually(fun, deadline, result)
     end
   end
 end

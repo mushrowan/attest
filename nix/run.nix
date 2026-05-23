@@ -43,8 +43,10 @@ pkgs.runCommand "vm-test-run-${name}"
   ''
     mkdir -p $out
     export HOME=$TMPDIR
+    export ERL_FLAGS="+fnu"
 
     ${wrapCmd} <<'INNER_SCRIPT'
+    export ERL_FLAGS="+fnu"
     ${pkgs.lib.optionalString hasNetwork ''
       ip link set lo up
     ''}

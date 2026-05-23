@@ -30,7 +30,7 @@ in
       inherit src version;
       pname = "attest-all-deps";
       mixEnv = "";
-      hash = "sha256-KCfASIzAsCqQZoOUS4A4Wc4pXslaJQgIPwkFR8fFjIA=";
+      hash = "sha256-O+WMgSP9/WSjh5UJ5amhcIyXCILuFf0LZQUNHP/eVMY=";
     };
 
     stripDebug = true;

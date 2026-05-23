@@ -31,7 +31,7 @@ defmodule IntegrationTest do
 
     start_command = "#{vm_script} #{qemu_args}"
 
-    Logger.info("starting VM with command: #{start_command}")
+    Logger.debug("starting VM with command: #{start_command}")
 
     {:ok, machine} =
       Attest.Machine.start_link(
@@ -43,14 +43,14 @@ defmodule IntegrationTest do
 
     try do
       # boot VM (5 min timeout handled by Machine.start)
-      Logger.info("booting VM...")
+      Logger.debug("booting VM...")
       :ok = Attest.Machine.start(machine)
-      Logger.info("VM booted, shell connected")
+      Logger.debug("VM booted, shell connected")
 
       # test execute
-      Logger.info("testing execute...")
+      Logger.debug("testing execute...")
       {exit_code, output} = Attest.Machine.execute(machine, "echo hello-from-vm")
-      Logger.info("execute result: exit=#{exit_code}, output=#{inspect(output)}")
+      Logger.debug("execute result: exit=#{exit_code}, output=#{inspect(output)}")
 
       if exit_code != 0 do
         raise "execute failed with exit code #{exit_code}"
@@ -61,12 +61,12 @@ defmodule IntegrationTest do
       end
 
       # test wait_for_unit
-      Logger.info("waiting for multi-user.target...")
+      Logger.debug("waiting for multi-user.target...")
       :ok = Attest.Machine.wait_for_unit(machine, "multi-user.target", 60_000)
-      Logger.info("multi-user.target is active")
+      Logger.debug("multi-user.target is active")
 
       # test screenshot
-      Logger.info("testing screenshot...")
+      Logger.debug("testing screenshot...")
       screenshot_path = Path.join(state_dir, "screenshot.ppm")
       :ok = Attest.Machine.screenshot(machine, screenshot_path)
 
@@ -80,14 +80,14 @@ defmodule IntegrationTest do
         raise "screenshot file too small: #{stat.size} bytes"
       end
 
-      Logger.info("screenshot saved: #{screenshot_path} (#{stat.size} bytes)")
+      Logger.debug("screenshot saved: #{screenshot_path} (#{stat.size} bytes)")
 
       # test graceful shutdown (poweroff via shell, wait for exit)
-      Logger.info("graceful shutdown...")
+      Logger.debug("graceful shutdown...")
       :ok = Attest.Machine.shutdown(machine, 60_000)
-      Logger.info("VM shutdown complete")
+      Logger.debug("VM shutdown complete")
 
-      Logger.info("=== ALL TESTS PASSED ===")
+      Logger.debug("=== ALL TESTS PASSED ===")
       :ok
     rescue
       e ->

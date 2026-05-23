@@ -21,16 +21,10 @@ let
         export STATE_DIR=$(mktemp -d)
         export VM_SCRIPT="${vmScript}"
         export HOME=$TMPDIR
-
-        echo "=== attest integration test ==="
-        echo "VM script: $VM_SCRIPT"
-        echo "State dir: $STATE_DIR"
-        echo ""
+        export ERL_FLAGS="+fnu"
 
         ${attest}/bin/attest eval-file ${./run-test.exs}
 
-        echo ""
-        echo "=== integration test passed ==="
         touch $out
       '';
 
@@ -47,16 +41,10 @@ let
         export STATE_DIR=$(mktemp -d)
         export VM_SCRIPT="${vmScript}"
         export HOME=$TMPDIR
-
-        echo "=== attest multi-vm test ==="
-        echo "VM script: $VM_SCRIPT"
-        echo "State dir: $STATE_DIR"
-        echo ""
+        export ERL_FLAGS="+fnu"
 
         ${attest}/bin/attest eval-file ${./multi-vm-test.exs}
 
-        echo ""
-        echo "=== multi-vm test passed ==="
         touch $out
       '';
 in

@@ -22,43 +22,38 @@ defmodule MultiVMTest do
       build_machine_config("bob", vm_script, vm2_dir)
     ]
 
-    Logger.info("starting Driver with 2 machines...")
+    Logger.debug("starting Driver with 2 machines...")
 
     {:ok, driver} = Attest.Driver.start_link(machines: machines)
 
     try do
-      # start machines sequentially to debug
-      Logger.info("booting alice...")
       {:ok, alice} = Attest.Driver.get_machine(driver, "alice")
-      :ok = Attest.Machine.start(alice)
-      Logger.info("alice booted")
-
-      Logger.info("booting bob...")
       {:ok, bob} = Attest.Driver.get_machine(driver, "bob")
-      :ok = Attest.Machine.start(bob)
-      Logger.info("bob booted")
-      Logger.info("all VMs booted")
+
+      Logger.debug("booting all VMs...")
+      :ok = Attest.Driver.start_all(driver)
+      Logger.debug("all VMs booted")
 
       # test execute on alice
-      Logger.info("testing execute on alice...")
+      Logger.debug("testing execute on alice...")
       {exit_code, output} = Attest.Machine.execute(alice, "hostname")
-      Logger.info("alice hostname: #{String.trim(output)}")
+      Logger.debug("alice hostname: #{String.trim(output)}")
 
       if exit_code != 0 do
         raise "alice execute failed"
       end
 
       # test execute on bob
-      Logger.info("testing execute on bob...")
+      Logger.debug("testing execute on bob...")
       {exit_code, output} = Attest.Machine.execute(bob, "hostname")
-      Logger.info("bob hostname: #{String.trim(output)}")
+      Logger.debug("bob hostname: #{String.trim(output)}")
 
       if exit_code != 0 do
         raise "bob execute failed"
       end
 
       # test parallel execution
-      Logger.info("testing parallel execution...")
+      Logger.debug("testing parallel execution...")
 
       task_alice =
         Task.async(fn ->
@@ -74,16 +69,20 @@ defmodule MultiVMTest do
 
       {0, "alice-says-hi"} = Task.await(task_alice, 10_000)
       {0, "bob-says-hi"} = Task.await(task_bob, 10_000)
-      Logger.info("parallel execution succeeded")
+      Logger.debug("parallel execution succeeded")
 
-      # shutdown both
-      Logger.info("shutting down VMs...")
-      :ok = Attest.Machine.shutdown(alice, 60_000)
-      Logger.info("alice shutdown complete")
-      :ok = Attest.Machine.shutdown(bob, 60_000)
-      Logger.info("bob shutdown complete")
+      Logger.debug("shutting down VMs...")
 
-      Logger.info("=== MULTI-VM TEST PASSED ===")
+      [alice: alice, bob: bob]
+      |> Task.async_stream(
+        fn {_name, machine} -> Attest.Machine.shutdown(machine, 60_000) end,
+        timeout: 65_000
+      )
+      |> Enum.each(fn {:ok, :ok} -> :ok end)
+
+      Logger.debug("all VMs shut down")
+
+      Logger.debug("=== MULTI-VM TEST PASSED ===")
       :ok
     rescue
       e ->
@@ -121,8 +120,8 @@ defmodule MultiVMTest do
     start_command =
       "env TMPDIR=#{state_dir} USE_TMPDIR=1 NIX_DISK_IMAGE=#{disk_image} #{vm_script} #{qemu_args}"
 
-    IO.puts(">>> Machine #{name} start_command: #{start_command}")
-    IO.puts(">>> Shell socket path: #{shell_path}")
+    Logger.debug(">>> Machine #{name} start_command: #{start_command}")
+    Logger.debug(">>> Shell socket path: #{shell_path}")
 
     %{
       name: name,

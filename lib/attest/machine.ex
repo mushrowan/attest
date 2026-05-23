@@ -25,6 +25,7 @@ defmodule Attest.Machine do
     booted: false,
     connected: false,
     callbacks: [],
+    timings: [],
     console_log: "",
     console_buffer: "",
     console_flush_timer: nil
@@ -739,14 +740,18 @@ defmodule Attest.Machine do
   def handle_call(:start, _from, state) do
     Logger.info("starting machine #{state.name}")
 
-    {:ok, shell_pid, backend_state} = state.backend_mod.start(state.backend_state)
+    {duration_ms, {:ok, shell_pid, backend_state}} =
+      timed(fn -> state.backend_mod.start(state.backend_state) end)
+
+    Logger.info("timing #{state.name}.start=#{duration_ms}ms")
 
     state = %{
       state
       | backend_state: backend_state,
         shell: shell_pid,
         booted: true,
-        connected: shell_pid != nil
+        connected: shell_pid != nil,
+        timings: [timing(:start, duration_ms) | state.timings]
     }
 
     {:reply, :ok, state}
@@ -767,8 +772,20 @@ defmodule Attest.Machine do
   @impl true
   def handle_call({:shutdown, timeout}, _from, state) do
     Logger.info("shutting down machine #{state.name}")
-    result = state.backend_mod.shutdown(state.backend_state, timeout)
-    {:reply, result, %{state | booted: false, connected: false, shell: nil}}
+
+    {duration_ms, result} =
+      timed(fn -> state.backend_mod.shutdown(state.backend_state, timeout) end)
+
+    Logger.info("timing #{state.name}.shutdown=#{duration_ms}ms")
+
+    {:reply, result,
+     %{
+       state
+       | booted: false,
+         connected: false,
+         shell: nil,
+         timings: [timing(:shutdown, duration_ms) | state.timings]
+     }}
   end
 
   @impl true
@@ -795,7 +812,17 @@ defmodule Attest.Machine do
     command = dedent(command)
     Logger.debug("executing on #{state.name}: #{command}")
 
-    case Shell.execute(shell, command) do
+    {duration_ms, result} = timed(fn -> Shell.execute(shell, command) end)
+    Logger.debug("timing #{state.name}.execute=#{duration_ms}ms")
+
+    state = %{
+      state
+      | timings: [
+          timing(:execute, duration_ms, %{command: String.slice(command, 0, 120)}) | state.timings
+        ]
+    }
+
+    case result do
       {:ok, output, exit_code} -> {:reply, {exit_code, output}, state}
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -805,7 +832,15 @@ defmodule Attest.Machine do
   def handle_call({:wait_for_unit, unit, timeout}, _from, %{shell: shell} = state) do
     Logger.info("waiting for unit #{unit} on #{state.name}")
 
-    case wait_unit_guest(shell, unit, timeout) do
+    {duration_ms, result} = timed(fn -> wait_unit_guest(shell, unit, timeout) end)
+    Logger.info("timing #{state.name}.wait_for_unit=#{duration_ms}ms unit=#{unit}")
+
+    state = %{
+      state
+      | timings: [timing(:wait_for_unit, duration_ms, %{unit: unit}) | state.timings]
+    }
+
+    case result do
       :ok ->
         {:reply, :ok, state}
 
@@ -941,6 +976,7 @@ defmodule Attest.Machine do
     metadata = %{
       name: state.name,
       backend: inspect(state.backend_mod),
+      timings: Enum.reverse(state.timings),
       state_dir: Map.get(state.backend_state, :state_dir),
       start_command: Map.get(state.backend_state, :start_command),
       api_socket_path: Map.get(state.backend_state, :api_socket_path),
@@ -1082,6 +1118,20 @@ defmodule Attest.Machine do
       {:ok, _output, _} -> {:error, {:port_not_open, port}}
       {:error, reason} -> {:error, {:shell_error, reason}}
     end
+  end
+
+  defp timed(fun) do
+    started_at = System.monotonic_time(:millisecond)
+    result = fun.()
+    {System.monotonic_time(:millisecond) - started_at, result}
+  end
+
+  defp timing(operation, duration_ms, metadata \\ %{}) do
+    %{
+      operation: operation,
+      duration_ms: duration_ms,
+      metadata: metadata
+    }
   end
 
   # take a temporary screenshot and run an OCR function on it

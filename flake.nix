@@ -76,6 +76,7 @@
                 }
                 ''
                   cd $src
+                  export ERL_FLAGS="+fnu"
                   export MIX_HOME=$TMPDIR/.mix
                   export HEX_HOME=$TMPDIR/.hex
                   mix format --check-formatted
@@ -96,11 +97,13 @@
 
               buildPhase = ''
                 runHook preBuild
+                export ERL_FLAGS="+fnu"
                 MIX_ENV=test mix compile --no-deps-check
                 runHook postBuild
               '';
 
               checkPhase = ''
+                export ERL_FLAGS="+fnu"
                 MIX_ENV=test mix test
               '';
 

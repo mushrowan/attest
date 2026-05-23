@@ -16,6 +16,7 @@ defmodule Attest.MixProject do
         plt_file: {:no_warn, "priv/plts/project.plt"},
         plt_add_apps: [:mix]
       ],
+      xref: [exclude: [Jason]],
 
       # test coverage
       test_coverage: [tool: ExCoveralls],
@@ -42,7 +43,8 @@ defmodule Attest.MixProject do
       # dev/test tools
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:excoveralls, "~> 0.18", only: :test}
+      {:excoveralls, "~> 0.18", only: :test, runtime: false},
+      {:castore, "~> 1.0", only: :test, runtime: false}
     ]
   end
 

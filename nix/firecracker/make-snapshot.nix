@@ -108,6 +108,7 @@ pkgs.runCommand "vm-snapshots-${name}"
   }
   ''
     export HOME=$TMPDIR
+    export ERL_FLAGS="+fnu"
     mkdir -p /tmp/snapshot-out
 
     # build driver wrapper
@@ -117,6 +118,7 @@ pkgs.runCommand "vm-snapshots-${name}"
       --set testScript "${testScriptFile}"
 
     ${wrapCmd} <<'INNER_SCRIPT'
+    export ERL_FLAGS="+fnu"
     ${lib.optionalString hasNetwork ''
       ip link set lo up
     ''}

@@ -10,7 +10,7 @@ defmodule Attest.Machine.Backend.QEMU do
 
   require Logger
 
-  alias Attest.Machine.{QMP, Shell}
+  alias Attest.Machine.{Backend, QMP, Shell}
 
   defstruct [
     :name,
@@ -60,8 +60,9 @@ defmodule Attest.Machine.Backend.QEMU do
         end)
       end
 
-    # give the listener a moment to bind the socket
-    if shell_task, do: Process.sleep(100)
+    if state.shell_socket_path do
+      :ok = Backend.wait_for_file(state.shell_socket_path, 5_000)
+    end
 
     # spawn QEMU process if start_command provided
     state =

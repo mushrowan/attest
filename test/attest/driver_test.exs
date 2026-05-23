@@ -155,7 +155,11 @@ defmodule Attest.DriverTest do
       metadata = Jason.decode!(File.read!(Path.join(machine_dir, "metadata.json")))
       assert metadata["name"] == name
       assert metadata["backend"] == "Attest.Machine.Backend.Mock"
+      assert metadata["timings"] == []
       assert Map.has_key?(metadata, "state_dir")
+
+      timings = Jason.decode!(File.read!(Path.join(out_dir, "timings.json")))
+      assert is_integer(timings["duration_ms"])
 
       File.rm_rf!(out_dir)
     end
