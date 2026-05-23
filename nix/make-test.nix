@@ -32,6 +32,8 @@
   globalTimeout ? 3600,
   # extra CLI args passed to the driver
   extraDriverArgs ? [ "--quiet" ],
+  # build and restore pre-warmed QEMU snapshots. still experimental.
+  usePrebuiltSnapshots ? false,
 }:
 let
   inherit (pkgs) lib;
@@ -87,6 +89,17 @@ let
   # extract just the VM derivations (for passthru)
   vms = lib.mapAttrs (_: node: node.vm) evaluatedNodes;
 
+  snapshots = lib.optionalAttrs usePrebuiltSnapshots (
+    lib.mapAttrs (
+      nodeName: node:
+      import ./qemu/make-snapshot.nix {
+        inherit pkgs attest;
+        name = nodeName;
+        inherit node;
+      }
+    ) evaluatedNodes
+  );
+
   # build machine config list from evaluated NixOS configs
   # binary name is run-${config.system.name}-vm (set by qemu-vm.nix)
   machines = lib.mapAttrsToList (
@@ -98,6 +111,10 @@ let
       name = nodeName;
       backend = "qemu";
       start_command = "${node.vm}/bin/run-${systemName}-vm";
+    }
+    // lib.optionalAttrs usePrebuiltSnapshots {
+      snapshot_path = "${snapshots.${nodeName}}";
+      base_disk_image = "${snapshots.${nodeName}}/${nodeName}.qcow2";
     }
   ) evaluatedNodes;
 
@@ -122,4 +139,5 @@ test
 // {
   inherit driver;
   inherit vms;
+  inherit snapshots;
 }

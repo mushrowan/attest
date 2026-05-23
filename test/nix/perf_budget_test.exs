@@ -31,3 +31,17 @@ defmodule Nix.TestCheckTest do
     assert source =~ "src = attest.src"
   end
 end
+
+defmodule Nix.QemuSnapshotTest do
+  use ExUnit.Case, async: true
+
+  test "qemu make-test can use prebuilt snapshots" do
+    make_test = File.read!("nix/make-test.nix")
+    flake = File.read!("flake.nix")
+
+    assert make_test =~ "usePrebuiltSnapshots ? false"
+    assert make_test =~ "./qemu/make-snapshot.nix"
+    assert make_test =~ "base_disk_image"
+    assert flake =~ "firecracker-prebuilt"
+  end
+end

@@ -20,6 +20,7 @@ defmodule Attest.Machine.Backend.QEMU do
     :state_dir,
     :shared_dir,
     :snapshot_path,
+    :extra_args,
     :qemu_port,
     :qmp,
     :shell,
@@ -37,7 +38,8 @@ defmodule Attest.Machine.Backend.QEMU do
        shell_socket_path: Map.get(config, :shell_socket_path),
        state_dir: Map.get(config, :state_dir),
        shared_dir: Map.get(config, :shared_dir),
-       snapshot_path: Map.get(config, :snapshot_path)
+       snapshot_path: Map.get(config, :snapshot_path),
+       extra_args: Map.get(config, :extra_args, [])
      }}
   end
 
@@ -89,7 +91,7 @@ defmodule Attest.Machine.Backend.QEMU do
           Logger.debug("spawning QEMU for #{state.name}")
 
           port =
-            Port.open({:spawn, state.start_command}, [:binary, :exit_status, :stderr_to_stdout])
+            Port.open({:spawn, qemu_command(state)}, [:binary, :exit_status, :stderr_to_stdout])
 
           %{state | qemu_port: port}
         else
@@ -102,16 +104,22 @@ defmodule Attest.Machine.Backend.QEMU do
     # wait for shell connection to complete
     state =
       if shell_task do
-        {duration_ms, metrics, {:ok, milestones}} =
-          Backend.timed(fn -> Task.await(shell_task, 120_000) end)
+        {duration_ms, metrics, result} = Backend.timed(fn -> Task.await(shell_task, 120_000) end)
 
-        state = Backend.record_timing(state, :shell_connected, duration_ms, milestones, metrics)
+        case result do
+          {:ok, milestones} ->
+            state =
+              Backend.record_timing(state, :shell_connected, duration_ms, milestones, metrics)
 
-        milestones
-        |> Enum.sort_by(fn {_operation, milestone_ms} -> milestone_ms end)
-        |> Enum.reduce(state, fn {operation, milestone_ms}, state ->
-          Backend.record_timing(state, operation, milestone_ms, %{}, %{})
-        end)
+            milestones
+            |> Enum.sort_by(fn {_operation, milestone_ms} -> milestone_ms end)
+            |> Enum.reduce(state, fn {operation, milestone_ms}, state ->
+              Backend.record_timing(state, operation, milestone_ms, %{}, %{})
+            end)
+
+          {:error, reason} ->
+            raise "QEMU shell connection failed for #{state.name}: #{inspect(reason)}"
+        end
       else
         state
       end
@@ -265,14 +273,26 @@ defmodule Attest.Machine.Backend.QEMU do
   end
 
   @impl true
-  def snapshot_create(_state, _snapshot_dir), do: {:error, :unsupported}
+  def snapshot_create(%{qmp: nil}, _snapshot_dir), do: {:error, :not_running}
+
+  def snapshot_create(%{qmp: qmp}, snapshot_dir) do
+    File.mkdir_p!(snapshot_dir)
+    File.write!(Path.join(snapshot_dir, "tag"), "ready\n")
+    QMP.savevm(qmp, "ready")
+  end
 
   @impl true
   def snapshot_load(_state, _snapshot_dir), do: {:error, :unsupported}
 
   @impl true
   def restore_from_snapshot(state, snapshot_dir) do
-    start(%{state | snapshot_path: nil, start_command: snapshot_command(state, snapshot_dir)})
+    state = %{state | snapshot_path: nil}
+
+    with {:ok, shell_pid, state} <- start(state),
+         {:ok, tag} <- read_snapshot_tag(snapshot_dir),
+         :ok <- QMP.loadvm(state.qmp, tag) do
+      {:ok, shell_pid, state}
+    end
   end
 
   @impl true
@@ -330,15 +350,18 @@ defmodule Attest.Machine.Backend.QEMU do
     end
   end
 
-  defp snapshot_command(state, snapshot_dir) do
-    snapshot_path = Path.join(snapshot_dir, "vm-state")
+  defp read_snapshot_tag(snapshot_dir) do
+    tag_path = Path.join(snapshot_dir, "tag")
 
-    [
-      state.start_command,
-      "-loadvm",
-      snapshot_path
-    ]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.join(" ")
+    case File.read(tag_path) do
+      {:ok, tag} -> {:ok, String.trim(tag)}
+      {:error, reason} -> {:error, {:snapshot_tag, reason}}
+    end
+  end
+
+  defp qemu_command(%{extra_args: []} = state), do: state.start_command
+
+  defp qemu_command(state) do
+    state.start_command <> " " <> Enum.join(state.extra_args, " ")
   end
 end

@@ -172,4 +172,36 @@ defmodule Attest.Machine.QMPTest do
       end)
     end
   end
+
+  describe "helpers" do
+    test "savevm uses the human monitor command" do
+      responses = [
+        ~s({"return": {}}),
+        ~s({"return": ""})
+      ]
+
+      with_mock_qmp(responses, fn socket_path ->
+        {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+
+        assert :ok = QMP.savevm(qmp, "ready")
+
+        GenServer.stop(qmp)
+      end)
+    end
+
+    test "loadvm uses the human monitor command" do
+      responses = [
+        ~s({"return": {}}),
+        ~s({"return": ""})
+      ]
+
+      with_mock_qmp(responses, fn socket_path ->
+        {:ok, qmp} = QMP.start_link(socket_path: socket_path)
+
+        assert :ok = QMP.loadvm(qmp, "ready")
+
+        GenServer.stop(qmp)
+      end)
+    end
+  end
 end

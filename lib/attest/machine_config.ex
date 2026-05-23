@@ -51,10 +51,13 @@ defmodule Attest.MachineConfig do
   defp parse_machine(%{"backend" => "qemu"} = m, state_dir) do
     name = Map.fetch!(m, "name")
     script = Map.fetch!(m, "start_command")
+    base_disk_image = Map.get(m, "base_disk_image")
+    snapshot = if path = Map.get(m, "snapshot_path"), do: %{snapshot_path: path}, else: %{}
 
     script
-    |> StartCommand.build(state_dir: state_dir, name: name)
+    |> StartCommand.build(state_dir: state_dir, name: name, base_disk_image: base_disk_image)
     |> StartCommand.to_machine_config()
+    |> Map.merge(snapshot)
   end
 
   defp parse_machine(%{"backend" => "firecracker"} = m, state_dir) do

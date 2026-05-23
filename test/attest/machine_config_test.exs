@@ -4,6 +4,63 @@ defmodule Attest.MachineConfigTest do
   alias Attest.MachineConfig
 
   describe "parse_file/2" do
+    test "preserves qemu snapshot_path when provided" do
+      path =
+        Path.join(
+          System.tmp_dir!(),
+          "machine-config-qemu-snapshot-#{:rand.uniform(100_000)}.json"
+        )
+
+      File.write!(
+        path,
+        Jason.encode!(%{
+          "machines" => [
+            %{
+              "name" => "machine",
+              "backend" => "qemu",
+              "start_command" => "run-vm",
+              "snapshot_path" => "/nix/store/qemu-snapshot"
+            }
+          ]
+        })
+      )
+
+      on_exit(fn -> File.rm(path) end)
+
+      %{machines: [machine]} = MachineConfig.parse_file(path, state_dir: System.tmp_dir!())
+
+      assert machine.backend == Attest.Machine.Backend.QEMU
+      assert machine.snapshot_path == "/nix/store/qemu-snapshot"
+    end
+
+    test "adds qemu base disk copy when provided" do
+      path =
+        Path.join(
+          System.tmp_dir!(),
+          "machine-config-qemu-base-disk-#{:rand.uniform(100_000)}.json"
+        )
+
+      File.write!(
+        path,
+        Jason.encode!(%{
+          "machines" => [
+            %{
+              "name" => "machine",
+              "backend" => "qemu",
+              "start_command" => "run-vm",
+              "base_disk_image" => "/nix/store/snapshot/machine.qcow2"
+            }
+          ]
+        })
+      )
+
+      on_exit(fn -> File.rm(path) end)
+
+      %{machines: [machine]} = MachineConfig.parse_file(path, state_dir: System.tmp_dir!())
+
+      assert machine.start_command =~ "cp --reflink=auto /nix/store/snapshot/machine.qcow2"
+    end
+
     test "parses QEMU machine config from JSON" do
       json =
         Jason.encode!(%{

@@ -36,6 +36,8 @@
 - added QEMU virtconsole milestones for guest connect, first output, and backdoor ready
 - made the nix unit test check reuse the package source filter
 - prototyped QEMU snapshot restore wiring behind `snapshot_path`
+- added QMP helpers for HMP `savevm`/`loadvm`
+- added experimental QEMU snapshot derivation wiring for future make-test snapshot restores
 - updated flake inputs and Hex deps
 - nix package dependency hashes refreshed for updated lock files
 - `mix test` and package/test nix builds green, full flake check still building after cache misses

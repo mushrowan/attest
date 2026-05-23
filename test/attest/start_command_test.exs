@@ -117,6 +117,18 @@ defmodule Attest.StartCommandTest do
 
       assert result.start_command =~ "SHARED_DIR=/tmp/s/vm-state-mynode/shared"
     end
+
+    test "can copy an immutable base disk before boot" do
+      result =
+        StartCommand.build(
+          "/nix/store/abc/bin/run-mynode-vm",
+          state_dir: "/tmp/s",
+          base_disk_image: "/nix/store/snapshot/mynode.qcow2"
+        )
+
+      assert result.start_command =~ "cp --reflink=auto /nix/store/snapshot/mynode.qcow2"
+      assert result.start_command =~ "/tmp/s/vm-state-mynode/mynode.qcow2"
+    end
   end
 
   describe "to_machine_config/1" do

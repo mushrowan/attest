@@ -101,6 +101,34 @@ defmodule Attest.Machine.QMP do
     GenServer.call(server, {:command, cmd, args})
   end
 
+  @doc """
+  Create a named VM snapshot via QEMU's human monitor command.
+  """
+  @spec savevm(GenServer.server(), String.t()) :: :ok | {:error, Error.t() | term()}
+  def savevm(server, tag) do
+    human_monitor_command(server, "savevm #{tag}")
+  end
+
+  @doc """
+  Load a named VM snapshot via QEMU's human monitor command.
+  """
+  @spec loadvm(GenServer.server(), String.t()) :: :ok | {:error, Error.t() | term()}
+  def loadvm(server, tag) do
+    human_monitor_command(server, "loadvm #{tag}")
+  end
+
+  @doc """
+  Run a QEMU human monitor command through QMP.
+  """
+  @spec human_monitor_command(GenServer.server(), String.t()) ::
+          :ok | {:error, Error.t() | term()}
+  def human_monitor_command(server, command_line) do
+    case command(server, "human-monitor-command", %{"command-line" => command_line}) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   # Server callbacks
 
   @impl true

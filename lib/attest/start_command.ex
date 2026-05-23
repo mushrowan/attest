@@ -48,12 +48,14 @@ defmodule Attest.StartCommand do
   - `:state_dir` (required) -- base directory for VM state
   - `:name` -- override machine name (default: extracted from script path)
   - `:allow_reboot` -- if true, omits `-no-reboot` (default: false)
+  - `:base_disk_image` -- optional immutable qcow2 copied to the writable VM disk
   """
   @spec build(String.t(), keyword()) :: t()
   def build(script_path, opts) do
     machine_name = Keyword.get(opts, :name) || name(script_path)
     base_state_dir = Keyword.fetch!(opts, :state_dir)
     allow_reboot = Keyword.get(opts, :allow_reboot, false)
+    base_disk_image = Keyword.get(opts, :base_disk_image)
 
     state_dir = Path.join(base_state_dir, "vm-state-#{machine_name}")
     qmp_socket = Path.join(state_dir, "qmp")
@@ -75,8 +77,8 @@ defmodule Attest.StartCommand do
     env_prefix =
       "env TMPDIR=#{state_dir} USE_TMPDIR=1 SHARED_DIR=#{shared_dir} NIX_DISK_IMAGE=#{disk_image}"
 
-    command =
-      "#{env_prefix} #{script_path} #{Enum.join(runtime_args, " ")}"
+    run_command = "#{env_prefix} #{script_path} #{Enum.join(runtime_args, " ")}"
+    command = maybe_copy_base_disk(run_command, base_disk_image, disk_image)
 
     %{
       name: machine_name,
@@ -108,4 +110,12 @@ defmodule Attest.StartCommand do
 
   defp maybe_add_no_reboot(args, true), do: args
   defp maybe_add_no_reboot(args, false), do: args ++ ["-no-reboot"]
+
+  defp maybe_copy_base_disk(command, nil, _disk_image), do: command
+
+  defp maybe_copy_base_disk(command, base_disk_image, disk_image) do
+    "mkdir -p #{Path.dirname(disk_image)} && " <>
+      "cp --reflink=auto #{base_disk_image} #{disk_image} && " <>
+      command
+  end
 end
