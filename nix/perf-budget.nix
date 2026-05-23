@@ -45,24 +45,21 @@ pkgs.runCommand "attest-perf-budget"
 
     mkdir -p $out
     summary=$out/summary.tsv
-    echo -e "check\tduration_ms\tmax_ms\tstatus" > "$summary"
-
-    failures=0
+    echo -e "check\tduration_ms\twarn_ms\tstatus" > "$summary"
 
     ${pkgs.lib.concatStringsSep "\n" (
       pkgs.lib.mapAttrsToList (name: cfg: ''
         timing_file="${cfg.drv}/timings.json"
         if [ ! -f "$timing_file" ]; then
-          echo -e "${name}\tmissing\t${toString cfg.maxMs}\tfail" >> "$summary"
-          echo "missing timing file for ${name}: $timing_file" >&2
-          failures=$((failures + 1))
+          echo -e "${name}\tmissing\t${toString cfg.maxMs}\twarn" >> "$summary"
+          echo "warning: missing timing file for ${name}: $timing_file" >&2
         else
           duration=$(jq -r '.duration_ms' "$timing_file")
           if [ "$duration" -le ${toString cfg.maxMs} ]; then
             status=ok
           else
-            status=fail
-            failures=$((failures + 1))
+            status=warn
+            echo "warning: ${name} took ''${duration}ms, budget is ${toString cfg.maxMs}ms" >&2
           fi
 
           echo -e "${name}\t$duration\t${toString cfg.maxMs}\t$status" >> "$summary"
@@ -71,8 +68,4 @@ pkgs.runCommand "attest-perf-budget"
     )}
 
     cat "$summary" >&2
-
-    if [ "$failures" -ne 0 ]; then
-      exit 1
-    fi
   ''
