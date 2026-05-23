@@ -46,8 +46,10 @@ pkgs.runCommand "attest-perf-budget"
     mkdir -p $out
     summary=$out/summary.tsv
     phases=$out/backend-phases.tsv
+    slow_phases=$out/slow-phases.tsv
     echo -e "check\tduration_ms\twarn_ms\tstatus" > "$summary"
     echo -e "check\tmachine\tbackend\tphase\tduration_ms\tcpu_us\treductions" > "$phases"
+    echo -e "check\tmachine\tbackend\tphase\tduration_ms\tcpu_us\treductions" > "$slow_phases"
 
     ${pkgs.lib.concatStringsSep "\n" (
       pkgs.lib.mapAttrsToList (name: cfg: ''
@@ -92,6 +94,12 @@ pkgs.runCommand "attest-perf-budget"
     cat "$summary" >&2
     if [ "$(wc -l < "$phases")" -gt 1 ]; then
       echo >&2
-      cat "$phases" >&2
+      {
+        head -n 1 "$phases"
+        tail -n +2 "$phases" | sort -t $'\t' -k5,5nr | head -n 12
+      } > "$slow_phases"
+
+      cat "$slow_phases" >&2
+      echo "full backend phase table: $phases" >&2
     fi
   ''

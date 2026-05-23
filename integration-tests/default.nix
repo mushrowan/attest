@@ -12,7 +12,7 @@ let
   basic =
     pkgs.runCommand "attest-integration"
       {
-        nativeBuildInputs = [ attest ];
+        nativeBuildInputs = [ pkgs.makeWrapper ];
         requiredSystemFeatures = [ "kvm" ];
       }
       ''
@@ -23,7 +23,13 @@ let
         export HOME=$TMPDIR
         export ERL_FLAGS="+fnu"
 
-        ${attest}/bin/attest -o $out --test-script ${./run-test.exs}
+        makeWrapper ${attest}/bin/attest $TMPDIR/attest-driver \
+          --set STATE_DIR "$STATE_DIR" \
+          --set VM_SCRIPT "${vmScript}" \
+          --set HOME "$HOME" \
+          --set ERL_FLAGS "+fnu"
+
+        $TMPDIR/attest-driver -o $out --test-script ${./run-test.exs}
 
         echo "attest timing integration: $(tr -d '\n' < "$out/timings.json")" >&2
       '';
@@ -32,7 +38,7 @@ let
   multi-vm =
     pkgs.runCommand "attest-multi-vm"
       {
-        nativeBuildInputs = [ attest ];
+        nativeBuildInputs = [ pkgs.makeWrapper ];
         requiredSystemFeatures = [ "kvm" ];
       }
       ''
@@ -43,7 +49,13 @@ let
         export HOME=$TMPDIR
         export ERL_FLAGS="+fnu"
 
-        ${attest}/bin/attest -o $out --test-script ${./multi-vm-test.exs}
+        makeWrapper ${attest}/bin/attest $TMPDIR/attest-driver \
+          --set STATE_DIR "$STATE_DIR" \
+          --set VM_SCRIPT "${vmScript}" \
+          --set HOME "$HOME" \
+          --set ERL_FLAGS "+fnu"
+
+        $TMPDIR/attest-driver -o $out --test-script ${./multi-vm-test.exs}
 
         echo "attest timing integration-multi-vm: $(tr -d '\n' < "$out/timings.json")" >&2
       '';

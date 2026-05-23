@@ -54,6 +54,15 @@ let
           virtualisation.memorySize = lib.mkDefault 512;
           virtualisation.cores = lib.mkDefault 1;
           documentation.enable = false;
+          documentation.man.enable = false;
+          documentation.nixos.enable = false;
+          programs.command-not-found.enable = false;
+          services.logrotate.enable = false;
+          services.udisks2.enable = false;
+          xdg.autostart.enable = false;
+          xdg.icons.enable = false;
+          xdg.mime.enable = false;
+          xdg.sounds.enable = false;
 
           # set hostname to node name
           networking.hostName = lib.mkDefault nodeName;

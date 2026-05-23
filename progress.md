@@ -30,6 +30,9 @@
 - added backend phase timings to machine artifact metadata
 - added BEAM cpu/reduction counters to operation and backend timing metadata
 - made `perf-budget` emit backend phase summaries as `backend-phases.tsv`
+- made `perf-budget` print only the slowest backend phases and keep the full table as an artifact
+- wrapped legacy integration drivers at build time to separate VM image inputs from the driver binary
+- trimmed default QEMU smoke VM services/docs, cutting single VM integration to about 9.8s on the latest run
 - updated flake inputs and Hex deps
 - nix package dependency hashes refreshed for updated lock files
 - `mix test` and package/test nix builds green, full flake check still building after cache misses

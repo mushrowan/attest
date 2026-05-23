@@ -16,6 +16,15 @@ let
 
       # reduce closure size
       documentation.enable = false;
+      documentation.man.enable = false;
+      documentation.nixos.enable = false;
+      programs.command-not-found.enable = false;
+      services.logrotate.enable = false;
+      services.udisks2.enable = false;
+      xdg.autostart.enable = false;
+      xdg.icons.enable = false;
+      xdg.mime.enable = false;
+      xdg.sounds.enable = false;
 
       # required for qemu-vm module
       fileSystems."/" = {
