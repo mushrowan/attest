@@ -8,6 +8,9 @@
   beamPackages,
   checks ? { },
 }:
+let
+  mix2nix = pkgs.mix2nix.override { inherit beamPackages; };
+in
 pkgs.mkShell {
   buildInputs = [
     # elixir toolchain
@@ -15,7 +18,7 @@ pkgs.mkShell {
     # note: hex from nixpkgs has compatibility issues with elixir 1.17
     # use `mix local.hex --force` to install a working version
     beamPackages.rebar3
-    pkgs.mix2nix
+    mix2nix
 
     # for mix deps
     pkgs.git
@@ -68,15 +71,32 @@ pkgs.mkShell {
     (writeShellScriptBin "nupd" ''
       set -euo pipefail
 
+      export HEX_HOME="$PWD/.nix-hex"
+      export MIX_HOME="$PWD/.nix-mix"
+      export ERL_FLAGS="+fnu"
+
+      rm -f "$HEX_HOME/cache.ets"
+
       echo "updating flake inputs..."
       nix flake update
 
       echo "updating hex dependencies..."
+      mix deps.clean --unused
+      mix deps.get
       mix deps.update --all
+      mix deps.clean --unused
+      mix deps.get
 
       echo "regenerating nix mix deps..."
       mix deps.nix
       nix fmt nix/mix-deps.nix
+
+      echo "validating dependency update..."
+      mix test
+      nix build .#attest --no-link
+
+      echo "changed files:"
+      jj --color never st || true
 
       echo "dependency update complete"
     '')
