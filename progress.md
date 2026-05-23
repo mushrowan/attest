@@ -2,6 +2,9 @@
 
 ## 2026-03-21
 
+- improved CLI help with `run`, `--quiet`, and `--verbose`
+- moved VM console output behind debug logging
+- quieted expected task and socket-close test noise where possible
 - updated flake inputs and Hex deps
 - nix package dependency hashes refreshed for updated lock files
 - `mix test` and package/test nix builds green, full flake check still building after cache misses

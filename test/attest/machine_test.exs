@@ -505,9 +505,15 @@ defmodule Attest.MachineTest do
 
         {:ok, _} = :gen_tcp.recv(client, 0, 5000)
         :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
-        {:ok, cmd} = :gen_tcp.recv(client, 0, 5000)
-        send(test_pid, {:qmp_command, cmd})
-        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        case :gen_tcp.recv(client, 0, 5000) do
+          {:ok, cmd} ->
+            send(test_pid, {:qmp_command, cmd})
+            :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+          {:error, :closed} ->
+            :ok
+        end
 
         receive do
           :stop -> :ok
@@ -726,9 +732,15 @@ defmodule Attest.MachineTest do
 
         {:ok, _} = :gen_tcp.recv(client, 0, 5000)
         :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
-        {:ok, cmd} = :gen_tcp.recv(client, 0, 5000)
-        send(test_pid, {:qmp_command, cmd})
-        :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+        case :gen_tcp.recv(client, 0, 5000) do
+          {:ok, cmd} ->
+            send(test_pid, {:qmp_command, cmd})
+            :ok = :gen_tcp.send(client, ~s({"return": {}}\n))
+
+          {:error, :closed} ->
+            :ok
+        end
 
         receive do
           :stop -> :ok

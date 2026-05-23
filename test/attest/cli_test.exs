@@ -3,6 +3,8 @@ defmodule Attest.CLITest do
 
   alias Attest.CLI
 
+  import ExUnit.CaptureIO
+
   describe "parse_args/1" do
     test "parses --start-scripts from space-separated string" do
       opts =
@@ -67,6 +69,21 @@ defmodule Attest.CLITest do
       assert opts.test_script == "path/to/test.exs"
     end
 
+    test "parses --quiet flag" do
+      opts = CLI.parse_args(["--quiet"])
+      assert opts.log_level == :warning
+    end
+
+    test "parses --verbose flag" do
+      opts = CLI.parse_args(["--verbose"])
+      assert opts.log_level == :debug
+    end
+
+    test "defaults log level to info" do
+      opts = CLI.parse_args([])
+      assert opts.log_level == :info
+    end
+
     test "parses --interactive flag" do
       opts = CLI.parse_args(["--interactive"])
       assert opts.interactive == true
@@ -125,6 +142,25 @@ defmodule Attest.CLITest do
         ])
 
       assert opts.machine_config == "/tmp/machines.json"
+    end
+  end
+
+  describe "main/1" do
+    test "help describes common run modes and log flags" do
+      output = capture_io(fn -> CLI.main(["--help"]) end)
+
+      assert output =~ "attest [options] [test-script]"
+      assert output =~ "--quiet"
+      assert output =~ "--verbose"
+      assert output =~ "--machine-config /path/to/machines.json"
+      assert output =~ "attest run test-script.exs"
+    end
+
+    test "run subcommand treats the next argument as the test script" do
+      opts = CLI.parse_args(["run", "test-script.exs"])
+
+      assert opts.subcommand == nil
+      assert opts.test_script == "test-script.exs"
     end
   end
 

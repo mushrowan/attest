@@ -2,7 +2,7 @@ defmodule Attest.DSLTest do
   use ExUnit.Case
 
   alias Attest.DSL
-  import Attest.DSL, only: [retry: 2]
+  require Attest.DSL
 
   describe "subtest/2" do
     test "runs the body and logs the label" do
@@ -20,16 +20,27 @@ defmodule Attest.DSLTest do
     end
 
     test "returns the body result" do
-      result = DSL.subtest("returns", fn -> 42 end)
-      assert result == 42
+      import ExUnit.CaptureLog
+
+      result =
+        capture_log(fn ->
+          send(self(), {:result, DSL.subtest("returns", fn -> 42 end)})
+        end)
+
+      assert result =~ "subtest: returns"
+      assert_received {:result, 42}
     end
 
     test "re-raises on failure" do
-      assert_raise RuntimeError, "boom", fn ->
-        DSL.subtest("my section", fn ->
-          raise "boom"
-        end)
-      end
+      import ExUnit.CaptureLog
+
+      capture_log(fn ->
+        assert_raise RuntimeError, "boom", fn ->
+          DSL.subtest("my section", fn ->
+            raise "boom"
+          end)
+        end
+      end)
     end
   end
 
@@ -76,7 +87,7 @@ defmodule Attest.DSLTest do
 
       result =
         DSL.retry attempts: 5, delay: 10 do
-          n = :counters.add(counter, 1, 1)
+          :counters.add(counter, 1, 1)
 
           if :counters.get(counter, 1) < 3 do
             raise "not yet"

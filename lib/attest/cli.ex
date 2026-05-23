@@ -21,6 +21,7 @@ defmodule Attest.CLI do
           keep_vm_state: boolean(),
           interactive: boolean(),
           output_dir: String.t() | nil,
+          log_level: Logger.level(),
           help: boolean()
         }
 
@@ -42,6 +43,8 @@ defmodule Attest.CLI do
     OptionParser.parse(args,
       strict: [
         help: :boolean,
+        quiet: :boolean,
+        verbose: :boolean,
         interactive: :boolean,
         keep_vm_state: :boolean,
         global_timeout: :integer,
@@ -53,6 +56,8 @@ defmodule Attest.CLI do
       ],
       aliases: [
         h: :help,
+        q: :quiet,
+        v: :verbose,
         i: :interactive,
         k: :keep_vm_state,
         K: :keep_vm_state,
@@ -74,8 +79,17 @@ defmodule Attest.CLI do
       keep_vm_state: opts[:keep_vm_state] || false,
       interactive: opts[:interactive] || false,
       output_dir: opts[:output_dir],
+      log_level: log_level(opts),
       help: opts[:help] || false
     }
+  end
+
+  defp log_level(opts) do
+    cond do
+      opts[:verbose] -> :debug
+      opts[:quiet] -> :warning
+      true -> :info
+    end
   end
 
   defp opt_or_env(opts, key, env_name, default \\ nil) do
@@ -85,6 +99,7 @@ defmodule Attest.CLI do
   @spec main([String.t()]) :: :ok
   def main(args) do
     opts = parse_args(args)
+    Logger.configure(level: opts.log_level)
 
     cond do
       opts.help ->
@@ -200,14 +215,16 @@ defmodule Attest.CLI do
 
     options:
       -h, --help             show this help
+      -q, --quiet            only show warnings and errors
+      -v, --verbose          show debug logs and VM console output
       -i, --interactive      start interactive IEx shell
       -K, --keep-vm-state    preserve VM state between runs
       -t, --global-timeout   global timeout in seconds (default: 3600)
       -o, --output-dir       output directory for screenshots etc
-      --start-scripts        space-separated VM start script paths
-      --machine-config       path to JSON machine config file
-      --vlans                space-separated VLAN numbers
-      --test-script          path to elixir test script
+      --start-scripts PATHS  space-separated VM start script paths
+      --machine-config PATH  path to JSON machine config file
+      --vlans NUMS           space-separated VLAN numbers
+      --test-script PATH     path to elixir test script
 
     environment variables (set by nix wrapProgram):
       startScripts           space-separated VM start script paths
@@ -217,8 +234,10 @@ defmodule Attest.CLI do
       globalTimeout          timeout in seconds
 
     examples:
+      attest run test-script.exs
       attest test-script.exs
       attest --interactive
+      attest --machine-config /path/to/machines.json test.exs
       attest --start-scripts "/nix/store/.../bin/run-server-vm" test.exs
     """)
   end
@@ -230,6 +249,8 @@ defmodule Attest.CLI do
   defp extract_subcommand(["eval-file", path | _rest]) do
     {{:eval_file, path}, []}
   end
+
+  defp extract_subcommand(["run" | rest]), do: {nil, rest}
 
   defp extract_subcommand(args), do: {nil, args}
 

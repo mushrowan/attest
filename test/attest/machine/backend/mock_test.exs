@@ -2,7 +2,7 @@ defmodule Attest.Machine.Backend.MockTest do
   use ExUnit.Case, async: true
 
   alias Attest.Machine.Backend.Mock
-  alias Attest.Machine.{QMP, Shell}
+  alias Attest.Machine.QMP
 
   describe "init/1" do
     test "stores injected shell pid" do

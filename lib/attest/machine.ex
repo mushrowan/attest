@@ -937,7 +937,7 @@ defmodule Attest.Machine do
     {lines, remainder} = split_complete_lines(buffer)
 
     Enum.each(lines, fn line ->
-      Logger.info("QEMU[#{state.name}]: #{String.slice(line, 0, 200)}")
+      Logger.debug("QEMU[#{state.name}]: #{String.slice(line, 0, 200)}")
     end)
 
     # schedule a flush for any partial line so it doesn't get stuck
@@ -953,7 +953,7 @@ defmodule Attest.Machine do
 
   @impl true
   def handle_info(:flush_console_buffer, state) do
-    Logger.info("QEMU[#{state.name}]: #{String.slice(state.console_buffer, 0, 200)}")
+    Logger.debug("QEMU[#{state.name}]: #{String.slice(state.console_buffer, 0, 200)}")
     {:noreply, %{state | console_buffer: "", console_flush_timer: nil}}
   end
 

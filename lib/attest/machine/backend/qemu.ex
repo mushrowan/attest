@@ -277,7 +277,7 @@ defmodule Attest.Machine.Backend.QEMU do
         text = data |> to_string() |> String.trim()
 
         if text != "" do
-          Logger.info("QEMU[#{name}]: #{String.slice(text, 0, 200)}")
+          Logger.debug("QEMU[#{name}]: #{String.slice(text, 0, 200)}")
         end
 
         drain_port_data(port, name)

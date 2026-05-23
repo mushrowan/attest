@@ -32,11 +32,17 @@ defmodule Attest.Machine.Shell.Transport.VsockTest do
         :inet.setopts(client, [{:packet, :line}])
         :ok = :gen_tcp.send(client, "Spawning backdoor root shell...\n")
 
-        # handle one command
-        {:ok, _cmd} = :gen_tcp.recv(client, 0, 5000)
-        :ok = :gen_tcp.send(client, Base.encode64("vsock works") <> "\n")
-        {:ok, _} = :gen_tcp.recv(client, 0, 5000)
-        :ok = :gen_tcp.send(client, "0\n")
+        # the test only verifies the CONNECT handshake. The client may close
+        # immediately after that, so avoid asserting on later shell traffic.
+        case :gen_tcp.recv(client, 0, 5000) do
+          {:ok, _cmd} ->
+            _ = :gen_tcp.send(client, Base.encode64("vsock works") <> "\n")
+            _ = :gen_tcp.recv(client, 0, 5000)
+            _ = :gen_tcp.send(client, "0\n")
+
+          {:error, :closed} ->
+            :ok
+        end
 
         receive do
           :stop -> :ok

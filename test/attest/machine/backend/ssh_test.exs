@@ -215,6 +215,8 @@ defmodule Attest.Machine.Backend.SSHTest do
   end
 
   defp ssh_echo_loop do
+    Process.flag(:trap_exit, true)
+
     case IO.read(:stdio, :line) do
       :eof ->
         :ok
@@ -223,8 +225,12 @@ defmodule Attest.Machine.Backend.SSHTest do
         :ok
 
       data ->
-        IO.write(:stdio, data)
-        ssh_echo_loop()
+        try do
+          IO.write(:stdio, data)
+          ssh_echo_loop()
+        rescue
+          ErlangError -> :ok
+        end
     end
   end
 end

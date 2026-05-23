@@ -72,14 +72,18 @@ defmodule AttestWaitAllTest do
     end
 
     test "propagates errors from tasks" do
+      import ExUnit.CaptureLog
+
       Process.flag(:trap_exit, true)
 
-      assert catch_exit(
-               Attest.wait_all([:a, :b], fn
-                 :a -> :ok
-                 :b -> raise "boom"
-               end)
-             )
+      capture_log(fn ->
+        assert catch_exit(
+                 Attest.wait_all([:a, :b], fn
+                   :a -> :ok
+                   :b -> raise "boom"
+                 end)
+               )
+      end)
     end
   end
 end

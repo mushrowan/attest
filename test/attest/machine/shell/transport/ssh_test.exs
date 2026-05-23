@@ -124,6 +124,8 @@ defmodule Attest.Machine.Shell.Transport.SSHTest do
   # echo shell for the test SSH daemon
   # reads lines from stdin (mapped to SSH channel) and writes them back
   defp ssh_echo_loop do
+    Process.flag(:trap_exit, true)
+
     case IO.read(:stdio, :line) do
       :eof ->
         :ok
@@ -132,8 +134,12 @@ defmodule Attest.Machine.Shell.Transport.SSHTest do
         :ok
 
       data ->
-        IO.write(:stdio, data)
-        ssh_echo_loop()
+        try do
+          IO.write(:stdio, data)
+          ssh_echo_loop()
+        rescue
+          ErlangError -> :ok
+        end
     end
   end
 end
