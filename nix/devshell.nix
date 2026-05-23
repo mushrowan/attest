@@ -15,6 +15,7 @@ pkgs.mkShell {
     # note: hex from nixpkgs has compatibility issues with elixir 1.17
     # use `mix local.hex --force` to install a working version
     beamPackages.rebar3
+    pkgs.mix2nix
 
     # for mix deps
     pkgs.git
@@ -62,6 +63,22 @@ pkgs.mkShell {
     (writeShellScriptBin "fmt" ''
       mix format "$@"
     '')
+
+    # update every pinned dependency source in this repo
+    (writeShellScriptBin "nupd" ''
+      set -euo pipefail
+
+      echo "updating flake inputs..."
+      nix flake update
+
+      echo "updating hex dependencies..."
+      mix deps.update --all
+
+      echo "regenerating nix mix deps..."
+      mix deps.nix
+
+      echo "dependency update complete"
+    '')
   ];
 
   shellHook = ''
@@ -93,6 +110,7 @@ pkgs.mkShell {
     echo "  mix dialyzer     - run type checker"
     echo "  iex -S mix       - interactive shell"
     echo "  check-verbose    - run all nix checks"
+    echo "  nupd             - update flake, hex, and generated nix deps"
     echo "  nix build        - build the package"
     echo ""
   '';

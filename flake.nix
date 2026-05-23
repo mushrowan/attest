@@ -88,7 +88,7 @@
               pname = "attest-tests";
               version = "0.1.0";
               src = ./.;
-              mixFodDeps = attest.passthru.mixFodDepsAll;
+              mixNixDeps = attest.passthru.testMixNixDeps;
               nativeBuildInputs = [
                 pkgs.vde2
                 pkgs.tesseract

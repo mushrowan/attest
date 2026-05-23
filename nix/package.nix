@@ -4,7 +4,6 @@
 # (see ex_doc, protoc-gen-elixir for reference)
 {
   beamPackages,
-  fetchMixDeps ? beamPackages.fetchMixDeps,
   mixRelease ? beamPackages.mixRelease,
   lib,
 }:
@@ -12,6 +11,13 @@ let
   pname = "attest";
   version = "0.1.0";
   src = ./..;
+  allMixNixDeps = import ./mix-deps.nix { inherit lib beamPackages; };
+  prodMixNixDeps = lib.getAttrs [ "jason" ] allMixNixDeps;
+  testMixNixDeps = lib.getAttrs [
+    "castore"
+    "excoveralls"
+    "jason"
+  ] allMixNixDeps;
 in
 {
   attest = mixRelease {
@@ -19,19 +25,11 @@ in
 
     escriptBinName = "attest";
 
-    mixFodDeps = fetchMixDeps {
-      inherit src version;
-      pname = "attest-deps";
-      hash = "sha256-R5sLhD3VI5A9LWCOiOMY/yij5VVKC0DqJ48k9oyiDDM=";
-    };
+    mixNixDeps = prodMixNixDeps;
 
-    # all deps including dev/test (for running tests in nix)
-    passthru.mixFodDepsAll = fetchMixDeps {
-      inherit src version;
-      pname = "attest-all-deps";
-      mixEnv = "test";
-      hash = "sha256-FKEQ6fqaXFgA4q6aszVreWEMPXgex/CJkYQ7QkAN6zQ=";
-    };
+    passthru.mixNixDeps = prodMixNixDeps;
+    passthru.testMixNixDeps = testMixNixDeps;
+    passthru.allMixNixDeps = allMixNixDeps;
 
     stripDebug = true;
 

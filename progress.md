@@ -18,6 +18,8 @@
 - removed a fixed QEMU shell-listener sleep by waiting for the socket
 - set `ERL_FLAGS=+fnu` in nix checks and VM runners to remove latin1 warnings
 - slimmed nix test dependency fetches to test-only deps
+- replaced fixed-output Mix dependency hashes with generated `nix/mix-deps.nix`
+- added `mix deps.nix` alias and `nupd` devshell command for full dependency updates
 - updated flake inputs and Hex deps
 - nix package dependency hashes refreshed for updated lock files
 - `mix test` and package/test nix builds green, full flake check still building after cache misses

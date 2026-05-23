@@ -24,6 +24,9 @@ defmodule Attest.MixProject do
         coveralls: :test,
         "coveralls.detail": :test,
         "coveralls.html": :test
+      ],
+      aliases: [
+        "deps.nix": ["cmd mix2nix > nix/mix-deps.nix"]
       ]
     ]
   end
