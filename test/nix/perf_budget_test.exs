@@ -21,3 +21,13 @@ defmodule Nix.IntegrationTestsTest do
     assert source =~ "makeWrapper ${attest}/bin/attest $TMPDIR/attest-driver"
   end
 end
+
+defmodule Nix.TestCheckTest do
+  use ExUnit.Case, async: true
+
+  test "nix unit test check reuses the package source filter" do
+    source = File.read!("flake.nix")
+
+    assert source =~ "src = attest.src"
+  end
+end

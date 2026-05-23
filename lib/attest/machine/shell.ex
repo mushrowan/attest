@@ -45,7 +45,20 @@ defmodule Attest.Machine.Shell do
   """
   @spec wait_for_connection(GenServer.server(), timeout()) :: :ok | {:error, term()}
   def wait_for_connection(server, timeout \\ 30_000) do
-    GenServer.call(server, {:wait_for_connection, timeout}, timeout + 5000)
+    case wait_for_connection_with_milestones(server, timeout) do
+      {:ok, _milestones} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Wait for the guest to connect and return transport-specific connection
+  milestones when the transport can provide them.
+  """
+  @spec wait_for_connection_with_milestones(GenServer.server(), timeout()) ::
+          {:ok, map()} | {:error, term()}
+  def wait_for_connection_with_milestones(server, timeout \\ 30_000) do
+    GenServer.call(server, {:wait_for_connection_with_milestones, timeout}, timeout + 5000)
   end
 
   @doc """
@@ -99,6 +112,29 @@ defmodule Attest.Machine.Shell do
   end
 
   @impl true
+  def handle_call(
+        {:wait_for_connection_with_milestones, timeout},
+        _from,
+        %{connected: false} = state
+      ) do
+    case connect_transport(state, timeout) do
+      {:ok, conn, milestones} ->
+        {:reply, {:ok, milestones}, %{state | conn: conn, connected: true}}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call(
+        {:wait_for_connection_with_milestones, _timeout},
+        _from,
+        %{connected: true} = state
+      ) do
+    {:reply, {:ok, %{}}, state}
+  end
+
+  @impl true
   def handle_call({:reconnect, timeout}, _from, state) do
     if state.conn do
       state.transport.close(state.conn)
@@ -117,6 +153,19 @@ defmodule Attest.Machine.Shell do
   def handle_call({:execute, command}, _from, %{conn: conn, connected: true} = state) do
     result = do_execute(state.transport, conn, command)
     {:reply, result, state}
+  end
+
+  defp connect_transport(state, timeout) do
+    Code.ensure_loaded?(state.transport)
+
+    if function_exported?(state.transport, :connect_with_milestones, 2) do
+      state.transport.connect_with_milestones(state.transport_config, timeout)
+    else
+      case state.transport.connect(state.transport_config, timeout) do
+        {:ok, conn} -> {:ok, conn, %{}}
+        {:error, reason} -> {:error, reason}
+      end
+    end
   end
 
   @impl true

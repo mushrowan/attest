@@ -87,7 +87,7 @@
             test = beamPackages.mixRelease {
               pname = "attest-tests";
               version = "0.1.0";
-              src = ./.;
+              src = attest.src;
               mixNixDeps = attest.passthru.testMixNixDeps;
               nativeBuildInputs = [
                 pkgs.vde2

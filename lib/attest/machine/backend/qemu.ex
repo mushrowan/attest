@@ -19,6 +19,7 @@ defmodule Attest.Machine.Backend.QEMU do
     :shell_socket_path,
     :state_dir,
     :shared_dir,
+    :snapshot_path,
     :qemu_port,
     :qmp,
     :shell,
@@ -35,8 +36,14 @@ defmodule Attest.Machine.Backend.QEMU do
        qmp_socket_path: Map.get(config, :qmp_socket_path),
        shell_socket_path: Map.get(config, :shell_socket_path),
        state_dir: Map.get(config, :state_dir),
-       shared_dir: Map.get(config, :shared_dir)
+       shared_dir: Map.get(config, :shared_dir),
+       snapshot_path: Map.get(config, :snapshot_path)
      }}
+  end
+
+  @impl true
+  def start(%{snapshot_path: snap} = state) when is_binary(snap) do
+    restore_from_snapshot(state, snap)
   end
 
   @impl true
@@ -61,7 +68,7 @@ defmodule Attest.Machine.Backend.QEMU do
         Logger.debug("waiting for shell connection on #{state.name}")
 
         Task.async(fn ->
-          Shell.wait_for_connection(shell_pid, 120_000)
+          Shell.wait_for_connection_with_milestones(shell_pid, 120_000)
         end)
       end
 
@@ -95,8 +102,16 @@ defmodule Attest.Machine.Backend.QEMU do
     # wait for shell connection to complete
     state =
       if shell_task do
-        {duration_ms, metrics, :ok} = Backend.timed(fn -> Task.await(shell_task, 120_000) end)
-        Backend.record_timing(state, :shell_connected, duration_ms, %{}, metrics)
+        {duration_ms, metrics, {:ok, milestones}} =
+          Backend.timed(fn -> Task.await(shell_task, 120_000) end)
+
+        state = Backend.record_timing(state, :shell_connected, duration_ms, milestones, metrics)
+
+        milestones
+        |> Enum.sort_by(fn {_operation, milestone_ms} -> milestone_ms end)
+        |> Enum.reduce(state, fn {operation, milestone_ms}, state ->
+          Backend.record_timing(state, operation, milestone_ms, %{}, %{})
+        end)
       else
         state
       end
@@ -256,7 +271,9 @@ defmodule Attest.Machine.Backend.QEMU do
   def snapshot_load(_state, _snapshot_dir), do: {:error, :unsupported}
 
   @impl true
-  def restore_from_snapshot(_state, _snapshot_dir), do: {:error, :unsupported}
+  def restore_from_snapshot(state, snapshot_dir) do
+    start(%{state | snapshot_path: nil, start_command: snapshot_command(state, snapshot_dir)})
+  end
 
   @impl true
   def handle_port_exit(state, _code) do
@@ -311,5 +328,17 @@ defmodule Attest.Machine.Backend.QEMU do
     after
       0 -> :ok
     end
+  end
+
+  defp snapshot_command(state, snapshot_dir) do
+    snapshot_path = Path.join(snapshot_dir, "vm-state")
+
+    [
+      state.start_command,
+      "-loadvm",
+      snapshot_path
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" ")
   end
 end

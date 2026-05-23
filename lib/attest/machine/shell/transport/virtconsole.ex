@@ -15,8 +15,22 @@ defmodule Attest.Machine.Shell.Transport.VirtConsole do
 
   @impl true
   def connect(config, timeout) do
+    case connect_with_milestones(config, timeout) do
+      {:ok, socket, _milestones} -> {:ok, socket}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Connect to the guest shell and return boot milestones measured from the
+  socket listener being created.
+  """
+  @spec connect_with_milestones(map(), timeout()) ::
+          {:ok, port(), map()} | {:error, term()}
+  def connect_with_milestones(config, timeout) do
     socket_path = Map.fetch!(config, :socket_path)
     File.rm(socket_path)
+    started_at = System.monotonic_time(:millisecond)
 
     with {:ok, listen_socket} <-
            :gen_tcp.listen(0, [
@@ -27,10 +41,12 @@ defmodule Attest.Machine.Shell.Transport.VirtConsole do
            ]),
          _ = Logger.debug("shell listening on #{socket_path}"),
          {:ok, socket} <- accept_or_close(listen_socket, timeout),
-         :ok <- wait_or_close(socket, listen_socket, timeout) do
+         guest_connected_ms = elapsed_ms(started_at),
+         {:ok, milestones} <-
+           wait_or_close(socket, listen_socket, timeout, started_at, guest_connected_ms) do
       Logger.debug("shell backdoor connected")
       :gen_tcp.close(listen_socket)
-      {:ok, socket}
+      {:ok, socket, milestones}
     end
   end
 
@@ -57,10 +73,10 @@ defmodule Attest.Machine.Shell.Transport.VirtConsole do
     end
   end
 
-  defp wait_or_close(socket, listen_socket, timeout) do
-    case wait_for_backdoor_ready(socket, timeout) do
-      :ok ->
-        :ok
+  defp wait_or_close(socket, listen_socket, timeout, started_at, guest_connected_ms) do
+    case wait_for_backdoor_ready(socket, timeout, started_at, nil) do
+      {:ok, milestones} ->
+        {:ok, Map.put(milestones, :guest_connected_ms, guest_connected_ms)}
 
       {:error, reason} ->
         :gen_tcp.close(socket)
@@ -69,17 +85,25 @@ defmodule Attest.Machine.Shell.Transport.VirtConsole do
     end
   end
 
-  defp wait_for_backdoor_ready(socket, timeout) do
+  defp wait_for_backdoor_ready(socket, timeout, started_at, first_output_ms) do
     case :gen_tcp.recv(socket, 0, timeout) do
       {:ok, line} ->
+        first_output_ms = first_output_ms || elapsed_ms(started_at)
+
         if String.contains?(line, @backdoor_ready) do
-          :ok
+          {:ok,
+           %{
+             first_output_ms: first_output_ms,
+             backdoor_ready_ms: elapsed_ms(started_at)
+           }}
         else
-          wait_for_backdoor_ready(socket, timeout)
+          wait_for_backdoor_ready(socket, timeout, started_at, first_output_ms)
         end
 
       {:error, reason} ->
         {:error, reason}
     end
   end
+
+  defp elapsed_ms(started_at), do: System.monotonic_time(:millisecond) - started_at
 end

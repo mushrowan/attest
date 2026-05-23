@@ -21,6 +21,40 @@ defmodule Attest.Machine.Shell.Transport.VirtConsoleTest do
   end
 
   describe "connect/2" do
+    test "returns connection milestones" do
+      socket_path =
+        Path.join(System.tmp_dir!(), "vc-milestones-#{:rand.uniform(10000)}.sock")
+
+      File.rm(socket_path)
+
+      spawn(fn ->
+        wait_for_socket(socket_path)
+
+        {:ok, sock} =
+          :gen_tcp.connect({:local, socket_path}, 0, [
+            :binary,
+            {:packet, :line},
+            {:active, false}
+          ])
+
+        :ok = :gen_tcp.send(sock, "early boot line\n")
+        :ok = :gen_tcp.send(sock, "Spawning backdoor root shell...\n")
+      end)
+
+      assert {:ok, socket, milestones} =
+               VirtConsole.connect_with_milestones(%{socket_path: socket_path}, 15_000)
+
+      assert is_port(socket)
+      assert Map.has_key?(milestones, :guest_connected_ms)
+      assert Map.has_key?(milestones, :first_output_ms)
+      assert Map.has_key?(milestones, :backdoor_ready_ms)
+      assert milestones.guest_connected_ms <= milestones.first_output_ms
+      assert milestones.first_output_ms <= milestones.backdoor_ready_ms
+
+      VirtConsole.close(socket)
+      File.rm(socket_path)
+    end
+
     test "listens and accepts connection" do
       socket_path =
         Path.join(System.tmp_dir!(), "vc-test-#{:rand.uniform(10000)}.sock")

@@ -18,6 +18,16 @@ defmodule Attest.Machine.Backend.QEMUTest do
       assert state.qmp_socket_path == "/tmp/qmp.sock"
       assert state.shell_socket_path == "/tmp/shell.sock"
     end
+
+    test "stores snapshot path" do
+      assert {:ok, state} =
+               QEMU.init(%{
+                 name: "snap-test",
+                 snapshot_path: "/nix/store/qemu-snapshot"
+               })
+
+      assert state.snapshot_path == "/nix/store/qemu-snapshot"
+    end
   end
 
   describe "start/1" do
@@ -59,6 +69,7 @@ defmodule Attest.Machine.Backend.QEMUTest do
       assert is_pid(shell_pid)
       assert new_state.qemu_port != nil
       assert Enum.any?(QEMU.timings(new_state), &(&1.operation == :shell_connected))
+      assert Enum.any?(QEMU.timings(new_state), &(&1.operation == :backdoor_ready_ms))
       assert_receive :guest_connected, 2000
 
       # cleanup
