@@ -76,6 +76,7 @@ pkgs.mkShell {
 
       echo "regenerating nix mix deps..."
       mix deps.nix
+      nix fmt nix/mix-deps.nix
 
       echo "dependency update complete"
     '')

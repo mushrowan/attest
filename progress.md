@@ -20,6 +20,7 @@
 - slimmed nix test dependency fetches to test-only deps
 - replaced fixed-output Mix dependency hashes with generated `nix/mix-deps.nix`
 - added `mix deps.nix` alias and `nupd` devshell command for full dependency updates
+- ran `nupd`; only nixpkgs advanced, Hex deps unchanged
 - updated flake inputs and Hex deps
 - nix package dependency hashes refreshed for updated lock files
 - `mix test` and package/test nix builds green, full flake check still building after cache misses
