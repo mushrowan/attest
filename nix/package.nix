@@ -29,8 +29,8 @@ in
     passthru.mixFodDepsAll = fetchMixDeps {
       inherit src version;
       pname = "attest-all-deps";
-      mixEnv = "";
-      hash = "sha256-O+WMgSP9/WSjh5UJ5amhcIyXCILuFf0LZQUNHP/eVMY=";
+      mixEnv = "test";
+      hash = "sha256-FKEQ6fqaXFgA4q6aszVreWEMPXgex/CJkYQ7QkAN6zQ=";
     };
 
     stripDebug = true;

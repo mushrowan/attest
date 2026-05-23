@@ -17,7 +17,7 @@
 - made legacy multi-VM integration start and shut down machines concurrently
 - removed a fixed QEMU shell-listener sleep by waiting for the socket
 - set `ERL_FLAGS=+fnu` in nix checks and VM runners to remove latin1 warnings
-- switched Firecracker snapshot create to non-deprecated `mem_backend`
+- slimmed nix test dependency fetches to test-only deps
 - updated flake inputs and Hex deps
 - nix package dependency hashes refreshed for updated lock files
 - `mix test` and package/test nix builds green, full flake check still building after cache misses
