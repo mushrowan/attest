@@ -236,6 +236,11 @@ defmodule Attest.Driver do
         Path.join(machine_dir, "console.log"),
         machine_console_log(pid)
       )
+
+      File.write!(
+        Path.join(machine_dir, "metadata.json"),
+        Jason.encode!(machine_metadata(pid), pretty: true)
+      )
     end
 
     artifacts_dir
@@ -245,5 +250,11 @@ defmodule Attest.Driver do
     if Process.alive?(pid), do: Attest.Machine.get_console_log(pid), else: ""
   catch
     :exit, _ -> ""
+  end
+
+  defp machine_metadata(pid) do
+    if Process.alive?(pid), do: Attest.Machine.artifact_metadata(pid), else: %{}
+  catch
+    :exit, _ -> %{}
   end
 end

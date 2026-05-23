@@ -148,7 +148,14 @@ defmodule Attest.DriverTest do
 
       GenServer.stop(driver)
 
-      assert File.read!(Path.join([out_dir, "machines", name, "console.log"])) == "boot log\n"
+      machine_dir = Path.join([out_dir, "machines", name])
+
+      assert File.read!(Path.join(machine_dir, "console.log")) == "boot log\n"
+
+      metadata = Jason.decode!(File.read!(Path.join(machine_dir, "metadata.json")))
+      assert metadata["name"] == name
+      assert metadata["backend"] == "Attest.Machine.Backend.Mock"
+      assert Map.has_key?(metadata, "state_dir")
 
       File.rm_rf!(out_dir)
     end

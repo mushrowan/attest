@@ -372,7 +372,8 @@ defmodule Attest.Machine.Backend.FirecrackerTest do
       assert_receive {:api_call, :snapshot_load, load_data}
       assert load_data =~ "PUT /snapshot/load"
       assert load_data =~ "snapshot_file"
-      assert load_data =~ "mem_file"
+      assert load_data =~ "mem_backend"
+      refute load_data =~ "mem_file_path"
       assert load_data =~ "resume_vm"
 
       Process.exit(server, :normal)

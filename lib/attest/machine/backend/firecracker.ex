@@ -263,7 +263,10 @@ defmodule Attest.Machine.Backend.Firecracker do
     retry_api(fn ->
       API.put(api, "/snapshot/load", %{
         "snapshot_path" => snapshot_path,
-        "mem_file_path" => mem_path,
+        "mem_backend" => %{
+          "backend_type" => "File",
+          "backend_path" => mem_path
+        },
         "resume_vm" => true
       })
     end)

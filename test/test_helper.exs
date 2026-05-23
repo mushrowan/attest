@@ -8,4 +8,4 @@ exclude =
     []
   end
 
-ExUnit.start(exclude: exclude)
+ExUnit.start(exclude: exclude, capture_log: true)

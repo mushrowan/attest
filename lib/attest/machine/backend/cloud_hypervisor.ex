@@ -297,9 +297,9 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
         "size" => state.mem_size_mib * 1024 * 1024
       },
       "disks" =>
-        [%{"path" => state.rootfs_path}] ++
+        [disk_config(state.rootfs_path)] ++
           Enum.map(state.extra_disks, fn disk ->
-            %{"path" => disk["path"], "readonly" => Map.get(disk, "readonly", false)}
+            disk_config(disk["path"], Map.get(disk, "readonly", false))
           end),
       "serial" => %{"mode" => "Null"},
       "console" => %{"mode" => "Off"},
@@ -315,6 +315,10 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp disk_config(path, readonly \\ false) do
+    %{"path" => path, "readonly" => readonly, "image_type" => "Raw"}
+  end
 
   defp maybe_put_net(map, []), do: map
 

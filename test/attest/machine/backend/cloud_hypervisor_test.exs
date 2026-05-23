@@ -148,7 +148,27 @@ defmodule Attest.Machine.Backend.CloudHypervisorTest do
       assert config["cpus"]["boot_vcpus"] == 2
       assert config["memory"]["size"] == 512 * 1024 * 1024
       assert hd(config["disks"])["path"] == "/rootfs.ext4"
+      assert hd(config["disks"])["image_type"] == "Raw"
       assert config["serial"]["mode"] == "Null"
+    end
+
+    test "marks extra disks as raw and preserves readonly" do
+      {:ok, state} =
+        CloudHypervisor.init(%{
+          name: "extra-disk-cfg",
+          kernel_image_path: "/vmlinux",
+          rootfs_path: "/rootfs.ext4",
+          extra_disks: [%{"path" => "/store.erofs", "readonly" => true}],
+          state_dir: "/tmp/ch-extra-disk-cfg"
+        })
+
+      config = CloudHypervisor.build_vm_config(state)
+
+      assert Enum.at(config["disks"], 1) == %{
+               "path" => "/store.erofs",
+               "readonly" => true,
+               "image_type" => "Raw"
+             }
     end
 
     test "includes vsock config" do

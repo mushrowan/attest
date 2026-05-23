@@ -482,6 +482,14 @@ defmodule Attest.Machine do
   end
 
   @doc """
+  Get artifact metadata for this machine.
+  """
+  @spec artifact_metadata(GenServer.server()) :: map()
+  def artifact_metadata(machine) do
+    GenServer.call(machine, :artifact_metadata)
+  end
+
+  @doc """
   Wait until the console output matches a regex
 
   Polls the console log buffer at 200ms intervals.
@@ -926,6 +934,22 @@ defmodule Attest.Machine do
   @impl true
   def handle_call(:get_console_log, _from, state) do
     {:reply, state.console_log, state}
+  end
+
+  @impl true
+  def handle_call(:artifact_metadata, _from, state) do
+    metadata = %{
+      name: state.name,
+      backend: inspect(state.backend_mod),
+      state_dir: Map.get(state.backend_state, :state_dir),
+      start_command: Map.get(state.backend_state, :start_command),
+      api_socket_path: Map.get(state.backend_state, :api_socket_path),
+      qmp_socket_path: Map.get(state.backend_state, :qmp_socket_path),
+      shell_socket_path: Map.get(state.backend_state, :shell_socket_path),
+      vsock_uds_path: Map.get(state.backend_state, :vsock_uds_path)
+    }
+
+    {:reply, metadata, state}
   end
 
   # port stdout/stderr data -- buffer and log complete lines

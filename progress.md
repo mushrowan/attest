@@ -8,6 +8,9 @@
 - switched SSH transport tests to exec mode to avoid interactive `ssh_cli` crashes
 - default nix driver runs with `--quiet`, while explicit `extraDriverArgs` can opt back in
 - driver now writes per-machine `console.log` artifacts and reports paths on test failure
+- added per-machine artifact `metadata.json`
+- unit tests now capture logs by default
+- fixed CH raw disk `image_type` and FC snapshot load `mem_backend` API warnings
 - updated flake inputs and Hex deps
 - nix package dependency hashes refreshed for updated lock files
 - `mix test` and package/test nix builds green, full flake check still building after cache misses
