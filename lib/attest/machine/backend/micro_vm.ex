@@ -57,10 +57,16 @@ defmodule Attest.Machine.Backend.MicroVM do
       @impl true
       def capabilities(_state), do: []
 
+      @impl true
+      def timings(state), do: Enum.reverse(Map.get(state, :timings, []))
+
       # shared vsock shell connection
 
       defp connect_shell(state) do
-        :ok = Backend.wait_for_file(state.vsock_uds_path, 30_000)
+        {duration_ms, :ok} =
+          Backend.timed(fn -> Backend.wait_for_file(state.vsock_uds_path, 30_000) end)
+
+        state = Backend.record_timing(state, :vsock_socket_ready, duration_ms)
 
         Logger.debug("connecting shell via vsock for #{state.name}")
 
@@ -71,8 +77,12 @@ defmodule Attest.Machine.Backend.MicroVM do
             transport_config: %{uds_path: state.vsock_uds_path, port: state.vsock_port}
           )
 
-        :ok = Shell.wait_for_connection(shell, 120_000)
-        state = %{state | shell: shell}
+        {duration_ms, :ok} = Backend.timed(fn -> Shell.wait_for_connection(shell, 120_000) end)
+
+        state =
+          state
+          |> Backend.record_timing(:shell_connected, duration_ms)
+          |> Map.put(:shell, shell)
 
         {:ok, shell, state}
       end

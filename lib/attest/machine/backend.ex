@@ -41,6 +41,8 @@ defmodule Attest.Machine.Backend do
 
   # introspection
   @callback capabilities(state) :: [:screenshot | :send_key | :network_control | :port_forward]
+  @callback timings(state) :: [map()]
+  @optional_callbacks timings: 1
 
   # shared helpers for microVM backends
 
@@ -143,5 +145,35 @@ defmodule Attest.Machine.Backend do
     else
       :ok
     end
+  end
+
+  @doc """
+  Run a function and return `{duration_ms, result}`.
+  """
+  @spec timed((-> result)) :: {non_neg_integer(), result} when result: var
+  def timed(fun) do
+    started_at = System.monotonic_time(:millisecond)
+    result = fun.()
+    {System.monotonic_time(:millisecond) - started_at, result}
+  end
+
+  @doc """
+  Build a timing entry.
+  """
+  @spec timing(atom(), non_neg_integer(), map()) :: map()
+  def timing(operation, duration_ms, metadata \\ %{}) do
+    %{
+      operation: operation,
+      duration_ms: duration_ms,
+      metadata: metadata
+    }
+  end
+
+  @doc """
+  Append a timing entry to backend state structs with a `:timings` field.
+  """
+  @spec record_timing(state, atom(), non_neg_integer(), map()) :: state
+  def record_timing(state, operation, duration_ms, metadata \\ %{}) do
+    Map.update!(state, :timings, &[timing(operation, duration_ms, metadata) | &1])
   end
 end

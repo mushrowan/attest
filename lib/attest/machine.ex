@@ -973,10 +973,18 @@ defmodule Attest.Machine do
 
   @impl true
   def handle_call(:artifact_metadata, _from, state) do
+    backend_timings =
+      if function_exported?(state.backend_mod, :timings, 1) do
+        state.backend_mod.timings(state.backend_state)
+      else
+        []
+      end
+
     metadata = %{
       name: state.name,
       backend: inspect(state.backend_mod),
       timings: Enum.reverse(state.timings),
+      backend_timings: backend_timings,
       state_dir: Map.get(state.backend_state, :state_dir),
       start_command: Map.get(state.backend_state, :start_command),
       api_socket_path: Map.get(state.backend_state, :api_socket_path),

@@ -80,6 +80,10 @@ defmodule MultiVMTest do
       )
       |> Enum.each(fn {:ok, :ok} -> :ok end)
 
+      out_dir = System.get_env("out") || state_dir
+      write_machine_metadata(out_dir, "alice", alice)
+      write_machine_metadata(out_dir, "bob", bob)
+
       Logger.debug("all VMs shut down")
 
       Logger.debug("=== MULTI-VM TEST PASSED ===")
@@ -92,6 +96,16 @@ defmodule MultiVMTest do
     after
       GenServer.stop(driver)
     end
+  end
+
+  defp write_machine_metadata(out_dir, name, machine) do
+    artifact_dir = Path.join([out_dir, "machines", name])
+    File.mkdir_p!(artifact_dir)
+
+    File.write!(
+      Path.join(artifact_dir, "metadata.json"),
+      Jason.encode!(Attest.Machine.artifact_metadata(machine), pretty: true)
+    )
   end
 
   defp build_machine_config(name, vm_script, state_dir) do

@@ -17,9 +17,7 @@ defmodule Attest.MixProject do
         plt_add_apps: [:mix]
       ],
       xref: [exclude: [Jason]],
-
-      # test coverage
-      test_coverage: [tool: ExCoveralls],
+      test_coverage: test_coverage(),
       preferred_cli_env: [
         coveralls: :test,
         "coveralls.detail": :test,
@@ -46,9 +44,17 @@ defmodule Attest.MixProject do
       # dev/test tools
       {:credo, "~> 1.7", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: :dev, runtime: false},
-      {:excoveralls, "~> 0.18", only: :test, runtime: false},
-      {:castore, "~> 1.0", only: :test, runtime: false}
+      {:excoveralls, "~> 0.18", only: :dev, runtime: false},
+      {:castore, "~> 1.0", only: :dev, runtime: false}
     ]
+  end
+
+  defp test_coverage do
+    if Code.ensure_loaded?(ExCoveralls) do
+      [tool: ExCoveralls]
+    else
+      []
+    end
   end
 
   defp escript do

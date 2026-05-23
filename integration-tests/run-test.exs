@@ -87,6 +87,14 @@ defmodule IntegrationTest do
       :ok = Attest.Machine.shutdown(machine, 60_000)
       Logger.debug("VM shutdown complete")
 
+      artifact_dir = Path.join(System.get_env("out") || state_dir, "machines/integration-test")
+      File.mkdir_p!(artifact_dir)
+
+      File.write!(
+        Path.join(artifact_dir, "metadata.json"),
+        Jason.encode!(Attest.Machine.artifact_metadata(machine), pretty: true)
+      )
+
       Logger.debug("=== ALL TESTS PASSED ===")
       :ok
     rescue

@@ -56,6 +56,7 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
     :tap_interfaces,
     :ch_port,
     :shell,
+    timings: [],
     port_exited: false
   ]
 
@@ -103,21 +104,31 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
 
     cmd = "#{state.cloud_hypervisor_bin} --api-socket #{state.api_socket_path}"
 
-    port =
-      Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout])
+    {duration_ms, port} =
+      Backend.timed(fn -> Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout]) end)
 
     state = %{state | ch_port: port}
+    state = Backend.record_timing(state, :process_spawned, duration_ms)
 
     # wait for API socket
-    :ok = wait_for_file(state.api_socket_path, 10_000)
+    {duration_ms, :ok} = Backend.timed(fn -> wait_for_file(state.api_socket_path, 10_000) end)
+    state = Backend.record_timing(state, :api_socket_ready, duration_ms)
 
     # create and boot VM via REST API
     Logger.debug("creating cloud-hypervisor VM #{state.name}")
     vm_config = build_vm_config(state)
-    :ok = API.put(state.api_socket_path, "/api/v1/vm.create", vm_config)
+
+    {duration_ms, :ok} =
+      Backend.timed(fn -> API.put(state.api_socket_path, "/api/v1/vm.create", vm_config) end)
+
+    state = Backend.record_timing(state, :vm_configured, duration_ms)
 
     Logger.debug("booting cloud-hypervisor VM #{state.name}")
-    :ok = API.put_no_body(state.api_socket_path, "/api/v1/vm.boot")
+
+    {duration_ms, :ok} =
+      Backend.timed(fn -> API.put_no_body(state.api_socket_path, "/api/v1/vm.boot") end)
+
+    state = Backend.record_timing(state, :vm_started, duration_ms)
 
     # connect shell via vsock
     connect_shell(state)
@@ -236,22 +247,35 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
     File.rm(state.vsock_uds_path)
 
     cmd = "#{state.cloud_hypervisor_bin} --api-socket #{state.api_socket_path}"
-    port = Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout])
+
+    {duration_ms, port} =
+      Backend.timed(fn -> Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout]) end)
+
     state = %{state | ch_port: port, port_exited: false, shell: nil}
+    state = Backend.record_timing(state, :process_spawned, duration_ms)
 
-    :ok = wait_for_file(state.api_socket_path, 10_000)
+    {duration_ms, :ok} = Backend.timed(fn -> wait_for_file(state.api_socket_path, 10_000) end)
+    state = Backend.record_timing(state, :api_socket_ready, duration_ms)
 
-    :ok =
-      retry_api(fn ->
-        API.put(state.api_socket_path, "/api/v1/vm.restore", %{
-          "source_url" => "file://#{snapshot_dir}"
-        })
+    {duration_ms, :ok} =
+      Backend.timed(fn ->
+        retry_api(fn ->
+          API.put(state.api_socket_path, "/api/v1/vm.restore", %{
+            "source_url" => "file://#{snapshot_dir}"
+          })
+        end)
       end)
 
-    :ok =
-      retry_api(fn ->
-        API.put_no_body(state.api_socket_path, "/api/v1/vm.resume")
+    state = Backend.record_timing(state, :snapshot_loaded, duration_ms)
+
+    {duration_ms, :ok} =
+      Backend.timed(fn ->
+        retry_api(fn ->
+          API.put_no_body(state.api_socket_path, "/api/v1/vm.resume")
+        end)
       end)
+
+    state = Backend.record_timing(state, :vm_resumed, duration_ms)
 
     state
   end

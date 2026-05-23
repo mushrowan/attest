@@ -13,11 +13,7 @@ let
   src = ./..;
   allMixNixDeps = import ./mix-deps.nix { inherit lib beamPackages; };
   prodMixNixDeps = lib.getAttrs [ "jason" ] allMixNixDeps;
-  testMixNixDeps = lib.getAttrs [
-    "castore"
-    "excoveralls"
-    "jason"
-  ] allMixNixDeps;
+  testMixNixDeps = lib.getAttrs [ "jason" ] allMixNixDeps;
 in
 {
   attest = mixRelease {
