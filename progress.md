@@ -2,9 +2,10 @@
 
 ## 2026-03-21
 
+- updated flake inputs and Hex deps
+- nix package dependency hashes refreshed for updated lock files
+- `mix test` and package/test nix builds green, full flake check still building after cache misses
 - FC performance: `enable_pci` (virtio-pci/MSI-X), `pmem_devices` (virtio-pmem), VMClock (auto in v1.15)
 - updated firecracker input from fork to upstream v1.15.0 (vsock fix merged upstream)
 - colocated jj, updated AGENTS.md for jj workflow
-- added SSH backend/transport, CH pre-built snapshots, Transport send/recv refactor
-- removed dead code, fixed stale docs, big docs cleanup
-- 275 tests, flake check green
+- earlier: SSH backend/transport, CH pre-built snapshots, transport refactor, docs cleanup

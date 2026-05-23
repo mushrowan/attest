@@ -22,7 +22,7 @@ in
     mixFodDeps = fetchMixDeps {
       inherit src version;
       pname = "attest-deps";
-      hash = "sha256-T1uL3xXXmCkobJJhS3p6xMrJUyiim3AMwaG87/Ix7A8=";
+      hash = "sha256-R5sLhD3VI5A9LWCOiOMY/yij5VVKC0DqJ48k9oyiDDM=";
     };
 
     # all deps including dev/test (for running tests in nix)
@@ -30,7 +30,7 @@ in
       inherit src version;
       pname = "attest-all-deps";
       mixEnv = "";
-      hash = "sha256-DfZ0GtQInaK04JxgjarPtLsS1JHC288PNc9Idum3rW4=";
+      hash = "sha256-KCfASIzAsCqQZoOUS4A4Wc4pXslaJQgIPwkFR8fFjIA=";
     };
 
     stripDebug = true;
