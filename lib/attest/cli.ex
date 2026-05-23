@@ -171,7 +171,20 @@ defmodule Attest.CLI do
 
     if opts.test_script do
       Logger.info("running test script: #{opts.test_script}")
-      TestScript.eval_file(opts.test_script, driver)
+
+      try do
+        TestScript.eval_file(opts.test_script, driver)
+      rescue
+        exception ->
+          artifacts_dir = Driver.collect_artifacts(driver)
+          Logger.error("test failed, artifacts saved to #{artifacts_dir}")
+          reraise exception, __STACKTRACE__
+      catch
+        kind, reason ->
+          artifacts_dir = Driver.collect_artifacts(driver)
+          Logger.error("test failed, artifacts saved to #{artifacts_dir}")
+          :erlang.raise(kind, reason, __STACKTRACE__)
+      end
     end
 
     if opts.interactive do

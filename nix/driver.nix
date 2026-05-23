@@ -30,7 +30,7 @@
   # global timeout in seconds
   globalTimeout ? 3600,
   # extra CLI args
-  extraDriverArgs ? [ ],
+  extraDriverArgs ? [ "--quiet" ],
   # test name for the derivation
   name ? "attest",
 }:

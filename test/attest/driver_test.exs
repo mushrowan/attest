@@ -133,6 +133,26 @@ defmodule Attest.DriverTest do
       assert length(shutdowns) == 2
     end
 
+    test "writes console logs to artifacts on terminate", %{id: id} do
+      out_dir = Path.join(System.tmp_dir!(), "attest-artifacts-#{id}")
+      name = "artifacts-#{id}"
+
+      {:ok, driver} =
+        Driver.start_link(
+          machines: [%{name: name, backend: Backend.Mock}],
+          out_dir: out_dir
+        )
+
+      {:ok, machine} = Driver.get_machine(driver, name)
+      send(machine, {:console_data, "boot log\n"})
+
+      GenServer.stop(driver)
+
+      assert File.read!(Path.join([out_dir, "machines", name, "console.log"])) == "boot log\n"
+
+      File.rm_rf!(out_dir)
+    end
+
     test "machines are stopped when driver terminates", %{id: id} do
       {:ok, driver} =
         Driver.start_link(

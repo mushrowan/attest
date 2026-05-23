@@ -947,6 +947,12 @@ defmodule Attest.Machine do
   end
 
   @impl true
+  def handle_info({:console_data, data}, state) do
+    text = to_string(data)
+    {:noreply, %{state | console_log: state.console_log <> text}}
+  end
+
+  @impl true
   def handle_info(:flush_console_buffer, %{console_buffer: ""} = state) do
     {:noreply, %{state | console_flush_timer: nil}}
   end

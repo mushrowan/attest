@@ -14,16 +14,14 @@ defmodule Attest.Machine.Backend.SSHTest do
     File.write!(Path.join(tmp, "ssh_host_rsa_key"), pem)
     File.chmod!(Path.join(tmp, "ssh_host_rsa_key"), 0o600)
 
-    # echo shell for the test SSH daemon
-    shell_fn = fn _user ->
-      spawn(fn -> ssh_echo_loop() end)
-    end
+    exec_fn = fn command -> {:ok, command} end
 
     {:ok, sshd} =
       :ssh.daemon(:loopback, 0, [
         {:system_dir, String.to_charlist(tmp)},
         {:user_passwords, [{~c"testuser", ~c"testpass"}]},
-        {:shell, shell_fn}
+        {:shell, :disabled},
+        {:exec, {:direct, exec_fn}}
       ])
 
     {:ok, info} = :ssh.daemon_info(sshd)
@@ -121,7 +119,8 @@ defmodule Attest.Machine.Backend.SSHTest do
         host: "127.0.0.1",
         port: port,
         user: "testuser",
-        password: "testpass"
+        password: "testpass",
+        mode: :exec
       }
 
       {:ok, state} = SSH.init(config)
@@ -139,7 +138,8 @@ defmodule Attest.Machine.Backend.SSHTest do
         host: "127.0.0.1",
         port: 1,
         user: "testuser",
-        password: "testpass"
+        password: "testpass",
+        mode: :exec
       }
 
       {:ok, state} = SSH.init(config)
@@ -149,12 +149,15 @@ defmodule Attest.Machine.Backend.SSHTest do
 
   describe "shutdown/2" do
     test "sends shutdown command and cleans up", %{port: port} do
+      Process.flag(:trap_exit, true)
+
       config = %{
         name: "ssh-shutdown",
         host: "127.0.0.1",
         port: port,
         user: "testuser",
-        password: "testpass"
+        password: "testpass",
+        mode: :exec
       }
 
       {:ok, state} = SSH.init(config)
@@ -174,7 +177,8 @@ defmodule Attest.Machine.Backend.SSHTest do
         host: "127.0.0.1",
         port: port,
         user: "testuser",
-        password: "testpass"
+        password: "testpass",
+        mode: :exec
       }
 
       {:ok, state} = SSH.init(config)
@@ -211,26 +215,6 @@ defmodule Attest.Machine.Backend.SSHTest do
     test "returns state unchanged" do
       {:ok, state} = SSH.init(%{host: "10.0.0.1"})
       assert ^state = SSH.handle_port_exit(state, 0)
-    end
-  end
-
-  defp ssh_echo_loop do
-    Process.flag(:trap_exit, true)
-
-    case IO.read(:stdio, :line) do
-      :eof ->
-        :ok
-
-      {:error, _} ->
-        :ok
-
-      data ->
-        try do
-          IO.write(:stdio, data)
-          ssh_echo_loop()
-        rescue
-          ErlangError -> :ok
-        end
     end
   end
 end

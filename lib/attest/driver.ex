@@ -58,6 +58,14 @@ defmodule Attest.Driver do
     GenServer.call(driver, :get_vlans)
   end
 
+  @doc """
+  Write machine console logs and return the artifact directory.
+  """
+  @spec collect_artifacts(GenServer.server()) :: String.t()
+  def collect_artifacts(driver) do
+    GenServer.call(driver, :collect_artifacts, 30_000)
+  end
+
   # server callbacks
 
   @impl true
@@ -143,6 +151,11 @@ defmodule Attest.Driver do
   end
 
   @impl true
+  def handle_call(:collect_artifacts, _from, state) do
+    {:reply, write_artifacts(state), state}
+  end
+
+  @impl true
   def handle_info(:global_timeout, state) do
     Logger.error("global timeout reached, terminating test")
     {:stop, :global_timeout, state}
@@ -156,6 +169,9 @@ defmodule Attest.Driver do
     if state.timeout_ref do
       Process.cancel_timer(state.timeout_ref)
     end
+
+    artifacts_dir = write_artifacts(state)
+    Logger.debug("test artifacts: #{artifacts_dir}")
 
     # shut down all machines in parallel, then wait for full cleanup
     machines = for {name, pid} <- state.machines || %{}, Process.alive?(pid), do: {name, pid}
@@ -206,5 +222,28 @@ defmodule Attest.Driver do
     if Process.alive?(pid), do: GenServer.stop(pid, :normal)
   catch
     :exit, _ -> :ok
+  end
+
+  defp write_artifacts(state) do
+    artifacts_dir = Path.join(state.out_dir || state.tmp_dir, "machines")
+    File.mkdir_p!(artifacts_dir)
+
+    for {name, pid} <- state.machines || %{} do
+      machine_dir = Path.join(artifacts_dir, name)
+      File.mkdir_p!(machine_dir)
+
+      File.write!(
+        Path.join(machine_dir, "console.log"),
+        machine_console_log(pid)
+      )
+    end
+
+    artifacts_dir
+  end
+
+  defp machine_console_log(pid) do
+    if Process.alive?(pid), do: Attest.Machine.get_console_log(pid), else: ""
+  catch
+    :exit, _ -> ""
   end
 end

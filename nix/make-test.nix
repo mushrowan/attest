@@ -31,7 +31,7 @@
   # global timeout in seconds
   globalTimeout ? 3600,
   # extra CLI args passed to the driver
-  extraDriverArgs ? [ ],
+  extraDriverArgs ? [ "--quiet" ],
 }:
 let
   inherit (pkgs) lib;

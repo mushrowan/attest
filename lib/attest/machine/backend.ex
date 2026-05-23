@@ -91,7 +91,16 @@ defmodule Attest.Machine.Backend do
   """
   @spec stop_shell(pid() | nil) :: :ok
   def stop_shell(nil), do: :ok
-  def stop_shell(pid), do: if(Process.alive?(pid), do: GenServer.stop(pid, :normal), else: :ok)
+
+  def stop_shell(pid) do
+    if Process.alive?(pid) do
+      GenServer.stop(pid, :normal, 5_000)
+    end
+
+    :ok
+  catch
+    :exit, _reason -> :ok
+  end
 
   @doc """
   Wait for a port process to exit

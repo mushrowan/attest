@@ -16,16 +16,14 @@ defmodule Attest.Machine.Shell.Transport.SSHTest do
 
     :ssh.start()
 
-    # echo shell: reads a line from stdin, writes it back
-    shell_fn = fn _user ->
-      spawn(fn -> ssh_echo_loop() end)
-    end
+    exec_fn = fn command -> {:ok, command} end
 
     {:ok, sshd} =
       :ssh.daemon(:loopback, 0, [
         {:system_dir, String.to_charlist(tmp)},
         {:user_passwords, [{~c"testuser", ~c"testpass"}]},
-        {:shell, shell_fn}
+        {:shell, :disabled},
+        {:exec, {:direct, exec_fn}}
       ])
 
     {:ok, info} = :ssh.daemon_info(sshd)
@@ -45,7 +43,8 @@ defmodule Attest.Machine.Shell.Transport.SSHTest do
         host: "127.0.0.1",
         port: port,
         user: "testuser",
-        password: "testpass"
+        password: "testpass",
+        mode: :exec
       }
 
       assert {:ok, conn} = SSH.connect(config, 5000)
@@ -68,7 +67,8 @@ defmodule Attest.Machine.Shell.Transport.SSHTest do
         host: "127.0.0.1",
         port: 1,
         user: "testuser",
-        password: "testpass"
+        password: "testpass",
+        mode: :exec
       }
 
       assert {:error, _} = SSH.connect(config, 2000)
@@ -81,7 +81,8 @@ defmodule Attest.Machine.Shell.Transport.SSHTest do
         host: "127.0.0.1",
         port: port,
         user: "testuser",
-        password: "testpass"
+        password: "testpass",
+        mode: :exec
       }
 
       {:ok, conn} = SSH.connect(config, 5000)
@@ -98,7 +99,8 @@ defmodule Attest.Machine.Shell.Transport.SSHTest do
         host: "127.0.0.1",
         port: port,
         user: "testuser",
-        password: "testpass"
+        password: "testpass",
+        mode: :exec
       }
 
       {:ok, conn} = SSH.connect(config, 5000)
@@ -113,33 +115,12 @@ defmodule Attest.Machine.Shell.Transport.SSHTest do
         host: "127.0.0.1",
         port: port,
         user: "testuser",
-        password: "testpass"
+        password: "testpass",
+        mode: :exec
       }
 
       {:ok, conn} = SSH.connect(config, 5000)
       assert :ok = SSH.close(conn)
-    end
-  end
-
-  # echo shell for the test SSH daemon
-  # reads lines from stdin (mapped to SSH channel) and writes them back
-  defp ssh_echo_loop do
-    Process.flag(:trap_exit, true)
-
-    case IO.read(:stdio, :line) do
-      :eof ->
-        :ok
-
-      {:error, _} ->
-        :ok
-
-      data ->
-        try do
-          IO.write(:stdio, data)
-          ssh_echo_loop()
-        rescue
-          ErlangError -> :ok
-        end
     end
   end
 end

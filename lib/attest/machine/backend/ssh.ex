@@ -39,6 +39,7 @@ defmodule Attest.Machine.Backend.SSH do
     :user,
     :password,
     :user_dir,
+    :mode,
     :shell,
     connected: false
   ]
@@ -54,7 +55,8 @@ defmodule Attest.Machine.Backend.SSH do
        port: Map.get(config, :port, 22),
        user: Map.get(config, :user, "root"),
        password: Map.get(config, :password),
-       user_dir: Map.get(config, :user_dir)
+       user_dir: Map.get(config, :user_dir),
+       mode: Map.get(config, :mode)
      }}
   end
 
@@ -90,9 +92,14 @@ defmodule Attest.Machine.Backend.SSH do
   def shutdown(%{shell: shell} = state, _timeout) do
     Logger.info("shutting down #{state.name} via SSH")
 
-    case Shell.execute(shell, "poweroff") do
-      {:ok, _, _} -> :ok
-      {:error, _} -> :ok
+    task = Task.async(fn -> Shell.execute(shell, "poweroff") end)
+
+    if Task.yield(task, 5_000) == nil do
+      Task.shutdown(task, :brutal_kill)
+    end
+
+    if Process.alive?(shell) do
+      Process.exit(shell, :kill)
     end
 
     cleanup(state)
@@ -161,6 +168,7 @@ defmodule Attest.Machine.Backend.SSH do
 
     config = if state.password, do: Map.put(config, :password, state.password), else: config
     config = if state.user_dir, do: Map.put(config, :user_dir, state.user_dir), else: config
+    config = if Map.get(state, :mode), do: Map.put(config, :mode, state.mode), else: config
     config
   end
 end
