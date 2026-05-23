@@ -118,19 +118,6 @@
               dontFixup = true;
             };
 
-            perf-budget = pkgs.runCommand "attest-perf-budget" { } ''
-              mkdir -p $out
-              cat > $out/README <<'EOF'
-              Performance budget notes
-
-              This check is intentionally non-failing for now. Runtime budgets are
-              collected from attest artifacts during VM checks. Once timings are
-              stable enough across builders, promote the useful thresholds into
-              failing checks.
-
-              Current warm full-flake target: under 3 minutes.
-              EOF
-            '';
           }
           // lib.optionalAttrs pkgs.stdenv.isLinux (
             let
@@ -374,6 +361,10 @@
                   Attest.succeed(bob, "ping -c 1 -W 3 alice")
 
                 '';
+              };
+              perf-budget = import ./nix/perf-budget.nix {
+                inherit pkgs;
+                checks = self'.checks;
               };
             }
           );

@@ -10,6 +10,7 @@
 #
 {
   pkgs,
+  lib ? pkgs.lib,
   # the wrapped driver from driver.nix
   driver,
   # test name
@@ -54,5 +55,11 @@ pkgs.runCommand "vm-test-run-${name}"
     ${preScript}
 
     ${driver}/bin/attest-driver -o $out
+
+    ${lib.optionalString (!hasNetwork) ''
+      if [ -f "$out/timings.json" ]; then
+        echo "attest timing ${name}: $(tr -d '\n' < "$out/timings.json")" >&2
+      fi
+    ''}
     INNER_SCRIPT
   ''

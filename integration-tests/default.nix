@@ -23,9 +23,9 @@ let
         export HOME=$TMPDIR
         export ERL_FLAGS="+fnu"
 
-        ${attest}/bin/attest eval-file ${./run-test.exs}
+        ${attest}/bin/attest -o $out --test-script ${./run-test.exs}
 
-        touch $out
+        echo "attest timing integration: $(tr -d '\n' < "$out/timings.json")" >&2
       '';
 
   # multi-vm test: boot two VMs via Driver
@@ -43,9 +43,9 @@ let
         export HOME=$TMPDIR
         export ERL_FLAGS="+fnu"
 
-        ${attest}/bin/attest eval-file ${./multi-vm-test.exs}
+        ${attest}/bin/attest -o $out --test-script ${./multi-vm-test.exs}
 
-        touch $out
+        echo "attest timing integration-multi-vm: $(tr -d '\n' < "$out/timings.json")" >&2
       '';
 in
 # return basic test by default (for backwards compat with flake.nix)
