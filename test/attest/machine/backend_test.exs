@@ -53,4 +53,17 @@ defmodule Attest.Machine.BackendTest do
       assert :ok = Backend.wait_for_process_exit(:fake_port, true, 100)
     end
   end
+
+  describe "timed/1" do
+    test "records cpu and reduction counters" do
+      {duration_ms, metrics, :ok} = Backend.timed(fn -> :ok end)
+
+      assert is_integer(duration_ms)
+      assert duration_ms >= 0
+      assert is_integer(metrics.cpu_us)
+      assert metrics.cpu_us >= 0
+      assert is_integer(metrics.reductions)
+      assert metrics.reductions >= 0
+    end
+  end
 end

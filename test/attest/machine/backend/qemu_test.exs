@@ -58,6 +58,7 @@ defmodule Attest.Machine.Backend.QEMUTest do
       assert {:ok, shell_pid, new_state} = QEMU.start(state)
       assert is_pid(shell_pid)
       assert new_state.qemu_port != nil
+      assert Enum.any?(QEMU.timings(new_state), &(&1.operation == :shell_connected))
       assert_receive :guest_connected, 2000
 
       # cleanup

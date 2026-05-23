@@ -28,6 +28,8 @@
 - made `perf-budget` warn on timings from VM check `timings.json` outputs
 - removed coverage tooling from the ordinary nix test dependency set
 - added backend phase timings to machine artifact metadata
+- added BEAM cpu/reduction counters to operation and backend timing metadata
+- made `perf-budget` emit backend phase summaries as `backend-phases.tsv`
 - updated flake inputs and Hex deps
 - nix package dependency hashes refreshed for updated lock files
 - `mix test` and package/test nix builds green, full flake check still building after cache misses

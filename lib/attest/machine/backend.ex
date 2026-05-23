@@ -148,23 +148,33 @@ defmodule Attest.Machine.Backend do
   end
 
   @doc """
-  Run a function and return `{duration_ms, result}`.
+  Run a function and return `{duration_ms, metrics, result}`.
   """
-  @spec timed((-> result)) :: {non_neg_integer(), result} when result: var
+  @spec timed((-> result)) :: {non_neg_integer(), map(), result} when result: var
   def timed(fun) do
     started_at = System.monotonic_time(:millisecond)
+    started_cpu_us = cpu_time_us()
+    started_reductions = reductions()
+
     result = fun.()
-    {System.monotonic_time(:millisecond) - started_at, result}
+
+    duration_ms = System.monotonic_time(:millisecond) - started_at
+    cpu_us = max(cpu_time_us() - started_cpu_us, 0)
+    reductions = max(reductions() - started_reductions, 0)
+
+    {duration_ms, %{cpu_us: cpu_us, reductions: reductions}, result}
   end
 
   @doc """
   Build a timing entry.
   """
-  @spec timing(atom(), non_neg_integer(), map()) :: map()
-  def timing(operation, duration_ms, metadata \\ %{}) do
+  @spec timing(atom(), non_neg_integer(), map(), map()) :: map()
+  def timing(operation, duration_ms, metadata \\ %{}, metrics \\ %{}) do
     %{
       operation: operation,
       duration_ms: duration_ms,
+      cpu_us: Map.get(metrics, :cpu_us, 0),
+      reductions: Map.get(metrics, :reductions, 0),
       metadata: metadata
     }
   end
@@ -172,8 +182,18 @@ defmodule Attest.Machine.Backend do
   @doc """
   Append a timing entry to backend state structs with a `:timings` field.
   """
-  @spec record_timing(state, atom(), non_neg_integer(), map()) :: state
-  def record_timing(state, operation, duration_ms, metadata \\ %{}) do
-    Map.update!(state, :timings, &[timing(operation, duration_ms, metadata) | &1])
+  @spec record_timing(state, atom(), non_neg_integer(), map(), map()) :: state
+  def record_timing(state, operation, duration_ms, metadata \\ %{}, metrics \\ %{}) do
+    Map.update!(state, :timings, &[timing(operation, duration_ms, metadata, metrics) | &1])
+  end
+
+  defp cpu_time_us do
+    {runtime_ms, _wall_clock_ms} = :erlang.statistics(:runtime)
+    runtime_ms * 1000
+  end
+
+  defp reductions do
+    {total, _since_last_call} = :erlang.statistics(:reductions)
+    total
   end
 end

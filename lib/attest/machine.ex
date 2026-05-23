@@ -740,7 +740,7 @@ defmodule Attest.Machine do
   def handle_call(:start, _from, state) do
     Logger.debug("starting machine #{state.name}")
 
-    {duration_ms, {:ok, shell_pid, backend_state}} =
+    {duration_ms, metrics, {:ok, shell_pid, backend_state}} =
       timed(fn -> state.backend_mod.start(state.backend_state) end)
 
     Logger.debug("timing #{state.name}.start=#{duration_ms}ms")
@@ -751,7 +751,7 @@ defmodule Attest.Machine do
         shell: shell_pid,
         booted: true,
         connected: shell_pid != nil,
-        timings: [timing(:start, duration_ms) | state.timings]
+        timings: [timing(:start, duration_ms, %{}, metrics) | state.timings]
     }
 
     {:reply, :ok, state}
@@ -773,7 +773,7 @@ defmodule Attest.Machine do
   def handle_call({:shutdown, timeout}, _from, state) do
     Logger.debug("shutting down machine #{state.name}")
 
-    {duration_ms, result} =
+    {duration_ms, metrics, result} =
       timed(fn -> state.backend_mod.shutdown(state.backend_state, timeout) end)
 
     Logger.debug("timing #{state.name}.shutdown=#{duration_ms}ms")
@@ -784,7 +784,7 @@ defmodule Attest.Machine do
        | booted: false,
          connected: false,
          shell: nil,
-         timings: [timing(:shutdown, duration_ms) | state.timings]
+         timings: [timing(:shutdown, duration_ms, %{}, metrics) | state.timings]
      }}
   end
 
@@ -812,13 +812,14 @@ defmodule Attest.Machine do
     command = dedent(command)
     Logger.debug("executing on #{state.name}: #{command}")
 
-    {duration_ms, result} = timed(fn -> Shell.execute(shell, command) end)
+    {duration_ms, metrics, result} = timed(fn -> Shell.execute(shell, command) end)
     Logger.debug("timing #{state.name}.execute=#{duration_ms}ms")
 
     state = %{
       state
       | timings: [
-          timing(:execute, duration_ms, %{command: String.slice(command, 0, 120)}) | state.timings
+          timing(:execute, duration_ms, %{command: String.slice(command, 0, 120)}, metrics)
+          | state.timings
         ]
     }
 
@@ -832,12 +833,12 @@ defmodule Attest.Machine do
   def handle_call({:wait_for_unit, unit, timeout}, _from, %{shell: shell} = state) do
     Logger.debug("waiting for unit #{unit} on #{state.name}")
 
-    {duration_ms, result} = timed(fn -> wait_unit_guest(shell, unit, timeout) end)
+    {duration_ms, metrics, result} = timed(fn -> wait_unit_guest(shell, unit, timeout) end)
     Logger.debug("timing #{state.name}.wait_for_unit=#{duration_ms}ms unit=#{unit}")
 
     state = %{
       state
-      | timings: [timing(:wait_for_unit, duration_ms, %{unit: unit}) | state.timings]
+      | timings: [timing(:wait_for_unit, duration_ms, %{unit: unit}, metrics) | state.timings]
     }
 
     case result do
@@ -1130,16 +1131,36 @@ defmodule Attest.Machine do
 
   defp timed(fun) do
     started_at = System.monotonic_time(:millisecond)
+    started_cpu_us = cpu_time_us()
+    started_reductions = reductions()
+
     result = fun.()
-    {System.monotonic_time(:millisecond) - started_at, result}
+
+    duration_ms = System.monotonic_time(:millisecond) - started_at
+    cpu_us = max(cpu_time_us() - started_cpu_us, 0)
+    reductions = max(reductions() - started_reductions, 0)
+
+    {duration_ms, %{cpu_us: cpu_us, reductions: reductions}, result}
   end
 
-  defp timing(operation, duration_ms, metadata \\ %{}) do
+  defp timing(operation, duration_ms, metadata, metrics) do
     %{
       operation: operation,
       duration_ms: duration_ms,
+      cpu_us: Map.get(metrics, :cpu_us, 0),
+      reductions: Map.get(metrics, :reductions, 0),
       metadata: metadata
     }
+  end
+
+  defp cpu_time_us do
+    {runtime_ms, _wall_clock_ms} = :erlang.statistics(:runtime)
+    runtime_ms * 1000
+  end
+
+  defp reductions do
+    {total, _since_last_call} = :erlang.statistics(:reductions)
+    total
   end
 
   # take a temporary screenshot and run an OCR function on it

@@ -42,7 +42,7 @@ defmodule Attest.Machine.Backend.QEMU do
   @impl true
   def start(state) do
     # create shell process (doesn't create socket yet)
-    {duration_ms, {shell_pid, state}} =
+    {duration_ms, metrics, {shell_pid, state}} =
       Backend.timed(fn ->
         if state.shell_socket_path do
           {:ok, shell} = Shell.start_link(socket_path: state.shell_socket_path)
@@ -52,7 +52,7 @@ defmodule Attest.Machine.Backend.QEMU do
         end
       end)
 
-    state = Backend.record_timing(state, :shell_process_started, duration_ms)
+    state = Backend.record_timing(state, :shell_process_started, duration_ms, %{}, metrics)
 
     # start shell listener in a task BEFORE spawning QEMU
     # this creates the unix socket that QEMU's chardev connects to
@@ -67,16 +67,16 @@ defmodule Attest.Machine.Backend.QEMU do
 
     state =
       if state.shell_socket_path do
-        {duration_ms, :ok} =
+        {duration_ms, metrics, :ok} =
           Backend.timed(fn -> Backend.wait_for_file(state.shell_socket_path, 5_000) end)
 
-        Backend.record_timing(state, :shell_socket_ready, duration_ms)
+        Backend.record_timing(state, :shell_socket_ready, duration_ms, %{}, metrics)
       else
         state
       end
 
     # spawn QEMU process if start_command provided
-    {duration_ms, state} =
+    {duration_ms, metrics, state} =
       Backend.timed(fn ->
         if state.start_command do
           Logger.debug("spawning QEMU for #{state.name}")
@@ -90,19 +90,19 @@ defmodule Attest.Machine.Backend.QEMU do
         end
       end)
 
-    state = Backend.record_timing(state, :process_spawned, duration_ms)
+    state = Backend.record_timing(state, :process_spawned, duration_ms, %{}, metrics)
 
     # wait for shell connection to complete
     state =
       if shell_task do
-        {duration_ms, :ok} = Backend.timed(fn -> Task.await(shell_task, 120_000) end)
-        Backend.record_timing(state, :shell_connected, duration_ms)
+        {duration_ms, metrics, :ok} = Backend.timed(fn -> Task.await(shell_task, 120_000) end)
+        Backend.record_timing(state, :shell_connected, duration_ms, %{}, metrics)
       else
         state
       end
 
     # connect to QMP socket if path provided
-    {duration_ms, state} =
+    {duration_ms, metrics, state} =
       Backend.timed(fn ->
         if state.qmp_socket_path do
           connect_qmp(state, state.qmp_socket_path)
@@ -111,7 +111,7 @@ defmodule Attest.Machine.Backend.QEMU do
         end
       end)
 
-    state = Backend.record_timing(state, :qmp_connected, duration_ms)
+    state = Backend.record_timing(state, :qmp_connected, duration_ms, %{}, metrics)
 
     {:ok, shell_pid, state}
   end

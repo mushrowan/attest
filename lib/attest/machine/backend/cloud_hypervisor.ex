@@ -104,31 +104,33 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
 
     cmd = "#{state.cloud_hypervisor_bin} --api-socket #{state.api_socket_path}"
 
-    {duration_ms, port} =
+    {duration_ms, metrics, port} =
       Backend.timed(fn -> Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout]) end)
 
     state = %{state | ch_port: port}
-    state = Backend.record_timing(state, :process_spawned, duration_ms)
+    state = Backend.record_timing(state, :process_spawned, duration_ms, %{}, metrics)
 
     # wait for API socket
-    {duration_ms, :ok} = Backend.timed(fn -> wait_for_file(state.api_socket_path, 10_000) end)
-    state = Backend.record_timing(state, :api_socket_ready, duration_ms)
+    {duration_ms, metrics, :ok} =
+      Backend.timed(fn -> wait_for_file(state.api_socket_path, 10_000) end)
+
+    state = Backend.record_timing(state, :api_socket_ready, duration_ms, %{}, metrics)
 
     # create and boot VM via REST API
     Logger.debug("creating cloud-hypervisor VM #{state.name}")
     vm_config = build_vm_config(state)
 
-    {duration_ms, :ok} =
+    {duration_ms, metrics, :ok} =
       Backend.timed(fn -> API.put(state.api_socket_path, "/api/v1/vm.create", vm_config) end)
 
-    state = Backend.record_timing(state, :vm_configured, duration_ms)
+    state = Backend.record_timing(state, :vm_configured, duration_ms, %{}, metrics)
 
     Logger.debug("booting cloud-hypervisor VM #{state.name}")
 
-    {duration_ms, :ok} =
+    {duration_ms, metrics, :ok} =
       Backend.timed(fn -> API.put_no_body(state.api_socket_path, "/api/v1/vm.boot") end)
 
-    state = Backend.record_timing(state, :vm_started, duration_ms)
+    state = Backend.record_timing(state, :vm_started, duration_ms, %{}, metrics)
 
     # connect shell via vsock
     connect_shell(state)
@@ -248,16 +250,18 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
 
     cmd = "#{state.cloud_hypervisor_bin} --api-socket #{state.api_socket_path}"
 
-    {duration_ms, port} =
+    {duration_ms, metrics, port} =
       Backend.timed(fn -> Port.open({:spawn, cmd}, [:binary, :exit_status, :stderr_to_stdout]) end)
 
     state = %{state | ch_port: port, port_exited: false, shell: nil}
-    state = Backend.record_timing(state, :process_spawned, duration_ms)
+    state = Backend.record_timing(state, :process_spawned, duration_ms, %{}, metrics)
 
-    {duration_ms, :ok} = Backend.timed(fn -> wait_for_file(state.api_socket_path, 10_000) end)
-    state = Backend.record_timing(state, :api_socket_ready, duration_ms)
+    {duration_ms, metrics, :ok} =
+      Backend.timed(fn -> wait_for_file(state.api_socket_path, 10_000) end)
 
-    {duration_ms, :ok} =
+    state = Backend.record_timing(state, :api_socket_ready, duration_ms, %{}, metrics)
+
+    {duration_ms, metrics, :ok} =
       Backend.timed(fn ->
         retry_api(fn ->
           API.put(state.api_socket_path, "/api/v1/vm.restore", %{
@@ -266,16 +270,16 @@ defmodule Attest.Machine.Backend.CloudHypervisor do
         end)
       end)
 
-    state = Backend.record_timing(state, :snapshot_loaded, duration_ms)
+    state = Backend.record_timing(state, :snapshot_loaded, duration_ms, %{}, metrics)
 
-    {duration_ms, :ok} =
+    {duration_ms, metrics, :ok} =
       Backend.timed(fn ->
         retry_api(fn ->
           API.put_no_body(state.api_socket_path, "/api/v1/vm.resume")
         end)
       end)
 
-    state = Backend.record_timing(state, :vm_resumed, duration_ms)
+    state = Backend.record_timing(state, :vm_resumed, duration_ms, %{}, metrics)
 
     state
   end

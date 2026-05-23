@@ -45,7 +45,9 @@ pkgs.runCommand "attest-perf-budget"
 
     mkdir -p $out
     summary=$out/summary.tsv
+    phases=$out/backend-phases.tsv
     echo -e "check\tduration_ms\twarn_ms\tstatus" > "$summary"
+    echo -e "check\tmachine\tbackend\tphase\tduration_ms\tcpu_us\treductions" > "$phases"
 
     ${pkgs.lib.concatStringsSep "\n" (
       pkgs.lib.mapAttrsToList (name: cfg: ''
@@ -64,8 +66,32 @@ pkgs.runCommand "attest-perf-budget"
 
           echo -e "${name}\t$duration\t${toString cfg.maxMs}\t$status" >> "$summary"
         fi
+
+        if [ -d "${cfg.drv}/machines" ]; then
+          find "${cfg.drv}/machines" -mindepth 2 -maxdepth 2 -name metadata.json -print0 |
+            while IFS= read -r -d ''' metadata_file; do
+              jq -r --arg check "${name}" '
+                . as $machine
+                | ($machine.backend_timings // [])[]
+                | [
+                    $check,
+                    ($machine.name // "unknown"),
+                    ($machine.backend // "unknown"),
+                    (.operation // "unknown"),
+                    (.duration_ms // 0),
+                    (.cpu_us // 0),
+                    (.reductions // 0)
+                  ]
+                | @tsv
+              ' "$metadata_file" >> "$phases"
+            done
+        fi
       '') budgetedChecks
     )}
 
     cat "$summary" >&2
+    if [ "$(wc -l < "$phases")" -gt 1 ]; then
+      echo >&2
+      cat "$phases" >&2
+    fi
   ''

@@ -134,31 +134,33 @@ defmodule Attest.Machine.Backend.Firecracker do
     # spawn firecracker process
     Logger.debug("spawning firecracker for #{state.name}")
 
-    {duration_ms, port} =
+    {duration_ms, metrics, port} =
       Backend.timed(fn ->
         Port.open({:spawn, fc_cmd(state)}, [:binary, :exit_status, :stderr_to_stdout])
       end)
 
     state = %{state | fc_port: port}
-    state = Backend.record_timing(state, :process_spawned, duration_ms)
+    state = Backend.record_timing(state, :process_spawned, duration_ms, %{}, metrics)
 
     # wait for API socket
-    {duration_ms, :ok} = Backend.timed(fn -> wait_for_file(state.api_socket_path, 10_000) end)
-    state = Backend.record_timing(state, :api_socket_ready, duration_ms)
+    {duration_ms, metrics, :ok} =
+      Backend.timed(fn -> wait_for_file(state.api_socket_path, 10_000) end)
+
+    state = Backend.record_timing(state, :api_socket_ready, duration_ms, %{}, metrics)
 
     # configure VM via REST API
-    {duration_ms, :ok} = Backend.timed(fn -> configure_vm(state) end)
-    state = Backend.record_timing(state, :vm_configured, duration_ms)
+    {duration_ms, metrics, :ok} = Backend.timed(fn -> configure_vm(state) end)
+    state = Backend.record_timing(state, :vm_configured, duration_ms, %{}, metrics)
 
     # boot
     Logger.debug("booting firecracker VM #{state.name}")
 
-    {duration_ms, :ok} =
+    {duration_ms, metrics, :ok} =
       Backend.timed(fn ->
         API.put(state.api_socket_path, "/actions", %{"action_type" => "InstanceStart"})
       end)
 
-    state = Backend.record_timing(state, :vm_started, duration_ms)
+    state = Backend.record_timing(state, :vm_started, duration_ms, %{}, metrics)
 
     # wait for vsock UDS and connect shell
     connect_shell(state)
@@ -177,19 +179,21 @@ defmodule Attest.Machine.Backend.Firecracker do
     File.rm(state.api_socket_path)
     File.rm(state.vsock_uds_path)
 
-    {duration_ms, port} =
+    {duration_ms, metrics, port} =
       Backend.timed(fn ->
         Port.open({:spawn, fc_cmd(state)}, [:binary, :exit_status, :stderr_to_stdout])
       end)
 
     state = %{state | fc_port: port, port_exited: false, shell: nil}
-    state = Backend.record_timing(state, :process_spawned, duration_ms)
+    state = Backend.record_timing(state, :process_spawned, duration_ms, %{}, metrics)
 
-    {duration_ms, :ok} = Backend.timed(fn -> wait_for_file(state.api_socket_path, 10_000) end)
-    state = Backend.record_timing(state, :api_socket_ready, duration_ms)
+    {duration_ms, metrics, :ok} =
+      Backend.timed(fn -> wait_for_file(state.api_socket_path, 10_000) end)
 
-    {duration_ms, :ok} = Backend.timed(fn -> snapshot_load(state, snapshot_dir) end)
-    state = Backend.record_timing(state, :snapshot_loaded, duration_ms)
+    state = Backend.record_timing(state, :api_socket_ready, duration_ms, %{}, metrics)
+
+    {duration_ms, metrics, :ok} = Backend.timed(fn -> snapshot_load(state, snapshot_dir) end)
+    state = Backend.record_timing(state, :snapshot_loaded, duration_ms, %{}, metrics)
 
     state
   end
